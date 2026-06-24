@@ -1,0 +1,159 @@
+{
+  "phase": "7G.5B-PREFLIGHT",
+  "description": "Custom fields wa_* preflight — mock DB + stub GHL API, no real writes",
+  "base_env": {
+    "WA_AGENT_MODE": "mock",
+    "GHL_SYNC_MODE": "dry_run",
+    "GHL_WRITE_CUSTOM_FIELDS": "false",
+    "GHL_LIVE_ALLOWED_PHONES": "+529991525583",
+    "ACADEMIC_ENGINE_ENABLED": "true",
+    "EVA_LLM_ENABLED": "false",
+    "WA_E2E_MOCK_DB": "true",
+    "YCLOUD_BUSINESS_NUMBER": "+529994538421",
+    "GHL_API_KEY": "mock-ghl-api-key",
+    "GHL_LOCATION_ID": "mock-ghl-location",
+    "GHL_API_BASE_URL": "https://services.leadconnectorhq.com",
+    "GHL_WA_FIELD_MAP": "{\"wa_last_intent\":\"mockFld01\",\"wa_last_message_at\":\"mockFld02\",\"wa_stage\":\"mockFld03\",\"wa_needs_human\":\"mockFld04\",\"wa_summary\":\"mockFld05\",\"wa_source\":\"mockFld06\",\"wa_last_inbound_text\":\"mockFld07\",\"wa_last_outbound_text\":\"mockFld08\"}"
+  },
+  "valid_map": "{\"wa_last_intent\":\"mockFld01\",\"wa_last_message_at\":\"mockFld02\",\"wa_stage\":\"mockFld03\",\"wa_needs_human\":\"mockFld04\",\"wa_summary\":\"mockFld05\",\"wa_source\":\"mockFld06\",\"wa_last_inbound_text\":\"mockFld07\",\"wa_last_outbound_text\":\"mockFld08\"}",
+  "forbidden_id_map": "{\"wa_last_intent\":\"yBz675YEp1pdvwnvloXP\",\"wa_last_message_at\":\"mockFld02\",\"wa_stage\":\"mockFld03\",\"wa_needs_human\":\"mockFld04\",\"wa_summary\":\"mockFld05\",\"wa_source\":\"mockFld06\",\"wa_last_inbound_text\":\"mockFld07\",\"wa_last_outbound_text\":\"mockFld08\"}",
+  "protected_key_map": "{\"wa_last_intent\":\"mockFld01\",\"wa_last_message_at\":\"mockFld02\",\"wa_stage\":\"mockFld03\",\"wa_needs_human\":\"mockFld04\",\"wa_summary\":\"mockFld05\",\"wa_source\":\"mockFld06\",\"wa_last_inbound_text\":\"mockFld07\",\"wa_last_outbound_text\":\"mockFld08\",\"promedio\":\"badPromedioId\"}",
+  "cases": [
+    {
+      "id": "A",
+      "name": "CF write OFF dry_run",
+      "mode": "direct_sync",
+      "env": { "GHL_WRITE_CUSTOM_FIELDS": "false", "GHL_SYNC_MODE": "dry_run" },
+      "intent": "carreras_disponibles",
+      "input": "1",
+      "waStage": "carreras_exploracion",
+      "needsHuman": false,
+      "expect": {
+        "custom_fields_written": false,
+        "custom_fields_would_write": false,
+        "custom_fields_skipped_reason": "ghl_sync_mode_not_live",
+        "custom_fields_put_calls": 0
+      }
+    },
+    {
+      "id": "B",
+      "name": "CF write ON dry_run — would_write only",
+      "mode": "direct_sync",
+      "env": { "GHL_WRITE_CUSTOM_FIELDS": "true", "GHL_SYNC_MODE": "dry_run" },
+      "intent": "carreras_disponibles",
+      "input": "1",
+      "waStage": "carreras_exploracion",
+      "needsHuman": false,
+      "expect": {
+        "custom_fields_written": false,
+        "custom_fields_would_write": true,
+        "custom_fields_map_valid": true,
+        "custom_fields_count": 8,
+        "custom_fields_skipped_reason": "ghl_sync_mode_not_live",
+        "custom_fields_put_calls": 0
+      }
+    },
+    {
+      "id": "C",
+      "name": "protected key promedio in map rejected",
+      "mode": "map_parse",
+      "env": { "GHL_WA_FIELD_MAP": "{{protected_key_map}}" },
+      "expect": {
+        "map_valid": false,
+        "error_includes": "extra_keys: promedio"
+      }
+    },
+    {
+      "id": "D",
+      "name": "forbidden GHL field id rejected",
+      "mode": "map_parse",
+      "env": { "GHL_WA_FIELD_MAP": "{{forbidden_id_map}}" },
+      "expect": {
+        "map_valid": false,
+        "error_includes": "forbidden_id"
+      }
+    },
+    {
+      "id": "E",
+      "name": "beca — no protected promedio CF in payload",
+      "mode": "direct_sync",
+      "env": { "GHL_WRITE_CUSTOM_FIELDS": "true", "GHL_SYNC_MODE": "dry_run" },
+      "intent": "beca",
+      "input": "Tengo promedio 9.8, qué beca me toca",
+      "waStage": "beca_interes",
+      "needsHuman": true,
+      "expect": {
+        "custom_fields_keys": ["wa_last_intent", "wa_last_message_at", "wa_stage", "wa_needs_human", "wa_summary", "wa_source", "wa_last_inbound_text", "wa_last_outbound_text"],
+        "wa_last_intent": "beca",
+        "wa_stage": "beca_interes",
+        "wa_needs_human": "true",
+        "forbidden_cf_keys": ["promedio", "beca_elegible", "carrera_recomendada"]
+      }
+    },
+    {
+      "id": "F",
+      "name": "carrera_interes — wa_stage not carrera_recomendada",
+      "mode": "direct_sync",
+      "env": { "GHL_WRITE_CUSTOM_FIELDS": "true", "GHL_SYNC_MODE": "dry_run" },
+      "intent": "carrera_interes",
+      "input": "Derecho online",
+      "waStage": "carrera_interes",
+      "needsHuman": false,
+      "expect": {
+        "wa_last_intent": "carrera_interes",
+        "wa_stage": "carrera_interes",
+        "forbidden_cf_keys": ["carrera_recomendada", "match_percent"]
+      }
+    },
+    {
+      "id": "G",
+      "name": "humano — wa_needs_human true",
+      "mode": "direct_sync",
+      "env": { "GHL_WRITE_CUSTOM_FIELDS": "true", "GHL_SYNC_MODE": "dry_run" },
+      "intent": "humano",
+      "input": "Quiero hablar con asesor",
+      "waStage": "asesor_requerido",
+      "needsHuman": true,
+      "expect": {
+        "wa_needs_human": "true",
+        "would_create_task": true
+      }
+    },
+    {
+      "id": "H",
+      "name": "no_se_que_estudiar payload",
+      "mode": "direct_sync",
+      "env": { "GHL_WRITE_CUSTOM_FIELDS": "true", "GHL_SYNC_MODE": "dry_run" },
+      "intent": "no_se_que_estudiar",
+      "input": "No sé qué estudiar",
+      "waStage": "test_recomendado",
+      "needsHuman": false,
+      "expect": {
+        "wa_last_intent": "no_se_que_estudiar",
+        "wa_stage": "test_recomendado",
+        "wa_needs_human": "false"
+      }
+    },
+    {
+      "id": "I",
+      "name": "live+write ON still no CF PUT if allowlist blocks",
+      "mode": "direct_sync",
+      "env": {
+        "GHL_WRITE_CUSTOM_FIELDS": "true",
+        "GHL_SYNC_MODE": "live",
+        "GHL_LIVE_ALLOWED_PHONES": "+529991525583"
+      },
+      "phone": "+521111111111",
+      "intent": "carreras_disponibles",
+      "input": "1",
+      "waStage": "carreras_exploracion",
+      "needsHuman": false,
+      "expect": {
+        "blocked": true,
+        "custom_fields_written": false,
+        "custom_fields_put_calls": 0,
+        "ghl_api_calls": 0
+      }
+    }
+  ]
+}
