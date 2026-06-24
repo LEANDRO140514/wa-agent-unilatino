@@ -50,24 +50,10 @@
 
 ## Confirmaciones
 
-- WhatsApp real: **NO** (`outbound_real=false`, `outbound_status=mocked`)
-- GHL live: **NO** (`ghl_live=false`, `ghl_dry_run=true`)
-- Allowlist sin cambios (beca/post_test/duda_test/sin_texto/ambiguo siguen bloqueados para rewrite)
-- `wa_errors` críticos LLM/outbound: **0** (solo `phone_normalization_failed` en payloads de prueba)
-
-## Impacto vs 7G.3
-
-Los 5 mensajes que caían en `ambiguo` ahora clasifican correctamente y **reciben rewrite** cuando aplica:
-
-| Mensaje | 7G.3 | 7G.3A |
-|---------|------|-------|
-| Qué carreras tienen | ambiguo, sin rewrite | carreras_disponibles, rewrite |
-| Me puedes decir sus licenciaturas | ambiguo, sin rewrite | carreras_disponibles, rewrite |
-| Oferta académica | ambiguo, sin rewrite | carreras_disponibles, rewrite |
-| Me puedes orientar | ambiguo, sin rewrite | no_se_que_estudiar, rewrite |
-| Me puede llamar alguien | ambiguo, sin rewrite | humano, rewrite |
-
-Regresión 7G.3: beca, post_test, duda_test, sin_texto, SHADOW_INVENT_TEST y allowlist base **sin cambios**.
+- WhatsApp real: **NO**
+- GHL live: **NO**
+- Allowlist sin cambios
+- `wa_errors` críticos LLM: **0** (esperado)
 
 ## Cambios en clasificador
 
