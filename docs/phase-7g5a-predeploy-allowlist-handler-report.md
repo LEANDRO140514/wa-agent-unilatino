@@ -1,6 +1,6 @@
 # Phase 7G.5A-PREDEPLOY — Deploy handler con GHL allowlist guard
 
-**Estado:** ✅ **COMPLETADO** — handler desplegado; GHL live **no** activado  
+**Estado:** ✅ **COMPLETADO** — handler desplegado + secret allowlist confirmado; GHL live **no** activado  
 **Fecha:** 2026-06-24  
 **Commit desplegado:** `4e70e3f9c85e9d09b0e03d4ff4c90c925434a5ef` (`feat: add ghl live allowlist guard`)
 
@@ -15,7 +15,7 @@
 | WhatsApp live | **No** |
 | Escritura GHL real | **No** |
 | Allowlist guard en runtime | **Sí** (código desplegado) |
-| Secret `GHL_LIVE_ALLOWED_PHONES` | **Pendiente** — Dashboard InsForge (MCP no escribe secrets) |
+| Secret `GHL_LIVE_ALLOWED_PHONES` | **✅ Configurado** — `allowed_phones_count: 1` (2026-06-24) |
 | Smoke 7G.3A post-deploy | **14/14 PASS** |
 | Test 7G.4T (local) | **8/8 PASS** |
 | Autorización 7G.5A GHL live | **Pendiente** Leandro |
@@ -66,17 +66,51 @@ Código desplegado incluye: `parseGhlLiveAllowedPhones`, `resolveGhlLiveAllowlis
 
 | Secret | Estado |
 |--------|--------|
-| `GHL_LIVE_ALLOWED_PHONES` | **Pendiente configurar en InsForge Dashboard** |
+| `GHL_LIVE_ALLOWED_PHONES` | **✅ Configurado en InsForge Dashboard** |
 
-Valor recomendado para 7G.5A:
-
-```
-GHL_LIVE_ALLOWED_PHONES=+529991525583
-```
+Valor configurado (sin imprimir): 1 número E.164 — Leandro `+529991525583`.
 
 **Nota:** Configurar este secret **no** activa GHL live. Solo prepara la barrera cuando `GHL_SYNC_MODE=live`.
 
-Evidencia runtime (sin secret): smoke inbound devolvió `ghl_allowed_phones_count: 0`.
+### 7G.5A-ALLOWLIST-SECRET — smoke confirmación (2026-06-24)
+
+POST inbound (`+529991525583`, `"1"`) en `mock` + `dry_run`:
+
+```json
+{
+  "ok": true,
+  "mode": "mock",
+  "outbound_real": false,
+  "outbound_status": "mocked",
+  "ghl_sync_mode": "dry_run",
+  "ghl_dry_run": true,
+  "ghl_live": false,
+  "ghl_allowed_phones_count": 1,
+  "ghl_allowlist_enabled": false,
+  "ghl_allowlist_matched": null,
+  "ghl_block_reason": null,
+  "custom_fields_written": false,
+  "normalized_phone": "+529991525583",
+  "intent": "carreras_disponibles"
+}
+```
+
+`wa_ghl_sync_log` (último registro Leandro): `allowed_phones_count: 1`, `status: dry_run`.
+
+| Check | Esperado dry_run | Resultado |
+|-------|------------------|-----------|
+| Secret reconocido (`allowed_phones_count`) | `1` | ✅ **PASS** |
+| `ghl_allowlist_enabled` | `false` (allowlist solo bloquea en `live`) | ✅ |
+| `ghl_allowlist_matched` | `null` (no aplica en `dry_run`) | ✅ |
+| `ghl_block_reason` | `null` | ✅ |
+| `ghl_dry_run` / `ghl_live` | `true` / `false` | ✅ |
+| `outbound_real` / `mocked` | `false` / `mocked` | ✅ |
+| Escritura GHL real | No | ✅ |
+| `wa_errors` críticos | 0 | ✅ |
+
+> En `GHL_SYNC_MODE=live`, se esperará `ghl_allowlist_enabled: true` y `ghl_allowlist_matched: true` para `+529991525583`.
+
+Evidencia previa (pre-secret): `ghl_allowed_phones_count: 0`.
 
 ---
 
@@ -170,11 +204,8 @@ Solo `phone_normalization_failed` en payloads de test 7G.3A (`+52555740001` fixt
 
 ## Recomendación para 7G.5A (siguiente fase — no iniciar aún)
 
-1. **Leandro:** configurar en InsForge Dashboard:
-   ```
-   GHL_LIVE_ALLOWED_PHONES=+529991525583
-   ```
-2. Verificar preflight: `ghl_allowed_phones_count: 1` (inbound dry_run de prueba).
+1. ~~**Leandro:** configurar `GHL_LIVE_ALLOWED_PHONES=+529991525583`~~ ✅ **Hecho** — confirmado `allowed_phones_count: 1`.
+2. ~~Verificar `ghl_allowed_phones_count: 1` en smoke dry_run.~~ ✅ **PASS**.
 3. **Autorización explícita** para activar temporalmente:
    ```
    GHL_SYNC_MODE=live
@@ -190,4 +221,5 @@ Solo `phone_normalization_failed` en payloads de test 7G.3A (`+52555740001` fixt
 
 ## Commit docs
 
-Este reporte: commit local `docs: add 7g5a predeploy allowlist handler report`
+- `docs: add 7g5a predeploy allowlist handler report` (`e5fb2db`)
+- `docs: confirm ghl allowlist secret in predeploy` (7G.5A-ALLOWLIST-SECRET)
