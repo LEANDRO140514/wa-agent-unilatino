@@ -1,0 +1,202 @@
+{
+  "phase": "7B.4",
+  "description": "E2E mock YCloud payloads — handler completo con academic-engine",
+  "env": {
+    "WA_AGENT_MODE": "mock",
+    "GHL_SYNC_MODE": "dry_run",
+    "GHL_WRITE_CUSTOM_FIELDS": "false",
+    "ACADEMIC_ENGINE_ENABLED": "true",
+    "EVA_LLM_ENABLED": "false",
+    "WA_E2E_MOCK_DB": "true",
+    "YCLOUD_BUSINESS_NUMBER": "+529994538421",
+    "GHL_WA_FIELD_MAP": "{\"wa_last_intent\":\"mockFld01\",\"wa_last_message_at\":\"mockFld02\",\"wa_stage\":\"mockFld03\",\"wa_needs_human\":\"mockFld04\",\"wa_summary\":\"mockFld05\",\"wa_source\":\"mockFld06\",\"wa_last_inbound_text\":\"mockFld07\",\"wa_last_outbound_text\":\"mockFld08\"}"
+  },
+  "ghost_careers": ["contaduría", "contaduria", "arquitectura", "criminología", "criminologia"],
+  "banned_claims": ["nasa", "space apps", "7 países", "7 paises", "trilingüe", "trilingue"],
+  "msi_forbidden_phrases": ["sí ofrecemos meses sin intereses", "ofrecemos meses sin intereses", "12 meses sin intereses"],
+  "cases": [
+    {
+      "id": 1,
+      "input": "1",
+      "expect_wa_intent": "carreras_disponibles",
+      "expect_academic_intent": "career_list",
+      "expect_academic_enriched": true,
+      "response_must_include": ["opciones oficiales", "programas académicos"],
+      "response_must_not_include": ["contaduría", "arquitectura"]
+    },
+    {
+      "id": 2,
+      "input": "Carreras disponibles",
+      "expect_wa_intent": "carreras_disponibles",
+      "expect_academic_intent": "career_list",
+      "expect_academic_enriched": true,
+      "response_must_include": ["Derecho", "Psicología"]
+    },
+    {
+      "id": 3,
+      "input": "¿Cuántas carreras tienen?",
+      "expect_wa_intent": "ambiguo",
+      "expect_academic_intent": "career_list",
+      "expect_academic_enriched": true,
+      "response_must_include": ["9", "12"]
+    },
+    {
+      "id": 4,
+      "input": "Quiero estudiar Psicología",
+      "expect_wa_intent": "carrera_interes",
+      "expect_academic_intent": "career_detail",
+      "expect_academic_enriched": true,
+      "response_must_include": ["Psicología", "4,650", "RVOE"]
+    },
+    {
+      "id": 5,
+      "input": "Derecho online",
+      "expect_wa_intent": "carrera_interes",
+      "expect_academic_intent": "career_detail",
+      "expect_academic_enriched": true,
+      "response_must_include": ["Derecho", "línea", "1,980"]
+    },
+    {
+      "id": 6,
+      "input": "¿Cuánto cuesta Derecho online?",
+      "expect_wa_intent": "carrera_interes",
+      "expect_academic_intent": "career_detail",
+      "expect_academic_enriched": true,
+      "response_must_include": ["1,980", "3,600"]
+    },
+    {
+      "id": 7,
+      "input": "Carreras en línea",
+      "expect_wa_intent": "ambiguo",
+      "expect_academic_intent": "modality_filter",
+      "expect_academic_enriched": true,
+      "response_must_include": ["línea", "1,980"]
+    },
+    {
+      "id": 8,
+      "input": "Tengo promedio 9.8, qué beca me toca",
+      "expect_wa_intent": "beca",
+      "expect_academic_intent": "scholarship",
+      "expect_academic_enriched": true,
+      "response_must_include": ["50%", "inscripción", "Sobresaliente"],
+      "preserve_operational": { "needsHuman": true, "createTask": true }
+    },
+    {
+      "id": 9,
+      "input": "Tengo promedio 8.2",
+      "expect_wa_intent": "beca",
+      "expect_academic_intent": "scholarship",
+      "expect_academic_enriched": true,
+      "response_must_include": ["50%", "inscripción", "Base"]
+    },
+    {
+      "id": 10,
+      "input": "¿Tienen meses sin intereses?",
+      "expect_wa_intent": "ambiguo",
+      "expect_academic_intent": "payment",
+      "expect_academic_enriched": true,
+      "response_must_include": ["no está documentado", "Meses sin intereses"],
+      "response_must_not_include": ["sí ofrecemos meses sin intereses"]
+    },
+    {
+      "id": 11,
+      "input": "¿Qué documentos necesito?",
+      "expect_wa_intent": "ambiguo",
+      "expect_academic_intent": "documents",
+      "expect_academic_enriched": true,
+      "response_must_include": ["Acta de nacimiento", "CURP"]
+    },
+    {
+      "id": 12,
+      "input": "¿Cómo me inscribo?",
+      "expect_wa_intent": "ambiguo",
+      "expect_academic_intent": "admission",
+      "expect_academic_enriched": true,
+      "response_must_include": ["Proceso de admisión", "inscripción"]
+    },
+    {
+      "id": 13,
+      "input": "¿Qué horarios tienen?",
+      "expect_wa_intent": "ambiguo",
+      "expect_academic_intent": "schedule",
+      "expect_academic_enriched": true,
+      "response_must_include": ["Presencial", "línea", "Sabatina"]
+    },
+    {
+      "id": 14,
+      "input": "¿Cuál es su WhatsApp?",
+      "expect_wa_intent": "ambiguo",
+      "expect_academic_intent": "contact",
+      "expect_academic_enriched": true,
+      "response_must_include": ["+52 999 453 8421", "informes@universidadlatino.edu.mx"]
+    },
+    {
+      "id": 15,
+      "input": "¿Tienen prácticas profesionales?",
+      "expect_wa_intent": "ambiguo",
+      "expect_academic_intent": "faq",
+      "expect_academic_enriched": true,
+      "response_must_include": ["prácticas profesionales garantizadas"]
+    },
+    {
+      "id": 16,
+      "input": "¿En Enfermería piden campos clínicos?",
+      "expect_wa_intent": "carrera_interes",
+      "expect_academic_intent": "career_detail",
+      "expect_academic_enriched": true,
+      "response_must_include": ["canalizar con un asesor"]
+    },
+    {
+      "id": 17,
+      "input": "NASA",
+      "expect_wa_intent": "ambiguo",
+      "expect_academic_intent": "fallback",
+      "expect_academic_enriched": false,
+      "expect_academic_skipped": true,
+      "response_must_include": ["1. Carreras disponibles"],
+      "response_must_not_include": ["nasa", "NASA", "Space Apps"]
+    },
+    {
+      "id": 18,
+      "input": "No sé qué estudiar",
+      "expect_wa_intent": "no_se_que_estudiar",
+      "expect_academic_intent": "fallback",
+      "expect_academic_enriched": false,
+      "expect_academic_skipped": true,
+      "expect_no_academic_override": true,
+      "response_must_include": ["test vocacional"],
+      "response_must_not_include": ["opciones oficiales"]
+    },
+    {
+      "id": 19,
+      "input": "Quiero hablar con asesor",
+      "expect_wa_intent": "humano",
+      "expect_academic_intent": "fallback",
+      "expect_academic_enriched": false,
+      "expect_academic_skipped": true,
+      "expect_no_academic_override": true,
+      "response_must_include": ["canalizar con un asesor"],
+      "response_must_not_include": ["opciones oficiales"],
+      "preserve_operational": { "needsHuman": true, "createTask": true }
+    },
+    {
+      "id": 20,
+      "input": "Se trabó el test",
+      "expect_wa_intent": "duda_test",
+      "expect_academic_intent": "fallback",
+      "expect_academic_enriched": false,
+      "expect_academic_skipped": true,
+      "expect_no_academic_override": true,
+      "response_must_include": ["test vocacional"],
+      "response_must_not_include": ["opciones oficiales"],
+      "preserve_operational": { "needsHuman": true, "createTask": true }
+    }
+  ],
+  "contact_state_reuse": {
+    "description": "Re-envío al mismo teléfono para validar upsert sin duplicar contacto",
+    "reuse_case_id": 1,
+    "followup_input": "2",
+    "expect_wa_intent": "beca",
+    "expect_single_contact": true
+  }
+}

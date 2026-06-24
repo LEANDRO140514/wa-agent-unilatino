@@ -1,0 +1,13 @@
+{
+  "name": "phase5c_menu_hotfix",
+  "description": "Fase 5C — Interpretación opciones menú Eva WA",
+  "cases": [
+    { "message_text": "1", "expected_intent": "carreras_disponibles", "expected_tag": "wa_interes_carreras" },
+    { "message_text": "1.", "expected_intent": "carreras_disponibles", "expected_tag": "wa_interes_carreras" },
+    { "message_text": "Carreras disponibles", "expected_intent": "carreras_disponibles", "expected_tag": "wa_interes_carreras" },
+    { "message_text": "2", "expected_intent": "beca", "expected_tag": "wa_interes_beca" },
+    { "message_text": "3", "expected_intent": "no_se_que_estudiar", "expected_tag": "wa_interes_test" },
+    { "message_text": "4", "expected_intent": "humano", "expected_tag": "wa_requiere_asesor" },
+    { "message_text": "Buenas noches", "expected_intent": "ambiguo", "expected_tag": "wa_interes_info" }
+  ]
+}

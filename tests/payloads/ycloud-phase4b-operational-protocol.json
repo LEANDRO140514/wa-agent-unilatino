@@ -1,0 +1,141 @@
+{
+  "name": "phase4b_operational_protocol",
+  "description": "Fase 4B — Protocolo operativo atención humana Eva WA (dry-run)",
+  "phase": "4B",
+  "safe_mode": {
+    "WA_AGENT_MODE": "mock",
+    "GHL_SYNC_MODE": "dry_run",
+    "GHL_WRITE_CUSTOM_FIELDS": "false"
+  },
+  "operational_defaults": {
+    "operational_owner": "Equipo de Admisiones Universidad Latino",
+    "business_hours_label": "Lunes a viernes 9:00-18:00, sábado 9:00-13:00",
+    "after_hours_logic_enabled": false
+  },
+  "cases": [
+    {
+      "id": "4b_01_ambiguo",
+      "payload": {
+        "from": "+525551100001",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Hola, quiero información"
+      },
+      "expected": {
+        "intent": "ambiguo",
+        "priority": "low",
+        "escalation_required": false,
+        "task": false,
+        "task_title": null
+      }
+    },
+    {
+      "id": "4b_02_no_se_que_estudiar",
+      "payload": {
+        "from": "+525551100002",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "No sé qué estudiar"
+      },
+      "expected": {
+        "intent": "no_se_que_estudiar",
+        "priority": "low",
+        "escalation_required": false,
+        "task": false
+      }
+    },
+    {
+      "id": "4b_03_carrera_interes",
+      "payload": {
+        "from": "+525551100003",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Me interesa Derecho"
+      },
+      "expected": {
+        "intent": "carrera_interes",
+        "priority": "low",
+        "escalation_required": false,
+        "task": false
+      }
+    },
+    {
+      "id": "4b_04_beca",
+      "payload": {
+        "from": "+525551100004",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Tengo promedio 9.3, quiero beca"
+      },
+      "expected": {
+        "intent": "beca",
+        "priority": "medium",
+        "escalation_required": true,
+        "task": true,
+        "task_title": "Atender lead WhatsApp — Interés en beca"
+      }
+    },
+    {
+      "id": "4b_05_post_test",
+      "payload": {
+        "from": "+525551100005",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Ya hice el test y me salió Derecho"
+      },
+      "expected": {
+        "intent": "post_test",
+        "priority": "medium",
+        "escalation_required": true,
+        "task": true,
+        "task_title": "Atender lead WhatsApp — Revisar resultado test"
+      }
+    },
+    {
+      "id": "4b_06_humano",
+      "payload": {
+        "from": "+525551100006",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Quiero hablar con un asesor"
+      },
+      "expected": {
+        "intent": "humano",
+        "priority": "high",
+        "escalation_required": true,
+        "task": true,
+        "task_title": "Atender lead WhatsApp — Solicita asesor"
+      }
+    },
+    {
+      "id": "4b_07_duda_test",
+      "payload": {
+        "from": "+525551100007",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Se trabó el test"
+      },
+      "expected": {
+        "intent": "duda_test",
+        "priority": "high",
+        "escalation_required": true,
+        "task": true,
+        "task_title": "Atender lead WhatsApp — Soporte test vocacional"
+      }
+    },
+    {
+      "id": "4b_08_sin_texto",
+      "payload": {
+        "from": "+525551100008",
+        "to": "+529994538421",
+        "message_type": "image"
+      },
+      "expected": {
+        "intent": "sin_texto",
+        "priority": "low",
+        "escalation_required": false,
+        "task": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+[
+  {
+    "name": "phase3a_01_ambiguo_info",
+    "description": "Hola, quiero información",
+    "expected_intent": "ambiguo",
+    "expected_tag": "wa_interes_info",
+    "expected_task": false,
+    "payload": {
+      "from": "+525551000101",
+      "to": "+529994538421",
+      "message_type": "text",
+      "message_text": "Hola, quiero información"
+    }
+  },
+  {
+    "name": "phase3a_02_no_se_que_estudiar",
+    "description": "No sé qué estudiar",
+    "expected_intent": "no_se_que_estudiar",
+    "expected_tag": "wa_interes_test",
+    "expected_task": false,
+    "payload": {
+      "from": "+525551000102",
+      "to": "+529994538421",
+      "message_type": "text",
+      "message_text": "No sé qué estudiar"
+    }
+  },
+  {
+    "name": "phase3a_03_beca",
+    "description": "Tengo promedio 9.3, qué beca me toca",
+    "expected_intent": "beca",
+    "expected_tag": "wa_interes_beca",
+    "expected_task": true,
+    "payload": {
+      "from": "+525551000103",
+      "to": "+529994538421",
+      "message_type": "text",
+      "message_text": "Tengo promedio 9.3, qué beca me toca"
+    }
+  },
+  {
+    "name": "phase3a_04_humano",
+    "description": "Quiero hablar con un asesor",
+    "expected_intent": "humano",
+    "expected_tag": "wa_requiere_asesor",
+    "expected_task": true,
+    "payload": {
+      "from": "+525551000104",
+      "to": "+529994538421",
+      "message_type": "text",
+      "message_text": "Quiero hablar con un asesor"
+    }
+  },
+  {
+    "name": "phase3a_05_duda_test",
+    "description": "Se trabó el test",
+    "expected_intent": "duda_test",
+    "expected_tag": "wa_duda_test",
+    "expected_task": true,
+    "payload": {
+      "from": "+525551000105",
+      "to": "+529994538421",
+      "message_type": "text",
+      "message_text": "Se trabó el test"
+    }
+  },
+  {
+    "name": "phase3a_06_sin_texto_imagen",
+    "description": "Imagen sin texto",
+    "expected_intent": "sin_texto",
+    "expected_tag": "wa_sin_texto",
+    "expected_task": true,
+    "payload": {
+      "from": "+525551000106",
+      "to": "+529994538421",
+      "message_type": "image",
+      "message_text": ""
+    }
+  }
+]

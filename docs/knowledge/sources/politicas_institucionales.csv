@@ -1,0 +1,22 @@
+clave,valor,canal_wa,intent_eva,notas
+examen_admision_requerido,false,todos,admission,No se requiere examen de admisión
+msi_disponible,false,todos,payment,Ver formas_pago.csv clave msi_tarjeta
+programas_unicos,9,todos,career_list,9 programas académicos únicos
+combinaciones_carrera_modalidad,12,todos,career_list,12 combinaciones carrera+modalidad
+inscripcion_presencial_default,8000,todos,faq,Regla: toda modalidad Presencial
+inscripcion_online_sabatina_default,3600,todos,faq,Regla: En línea y Sabatina
+beca_sujeta_validacion_admisiones,true,todos,scholarship,Toda beca/descuento sujeta a validación de admisiones
+beca_mantenimiento_promedio_minimo,true,todos,scholarship,Mantener promedio mínimo; al corriente en pagos; sin sanciones disciplinarias
+practicas_profesionales_garantizadas,true,todos,career_detail,Validado Leandro 2026-06-18; claim institucional general
+respuesta_requisitos_especificos_ss_practicas,"Algunas carreras pueden requerir prácticas, servicio social o requisitos específicos. Te puedo canalizar con un asesor para revisar el caso de la carrera que te interesa.",todos,"admission|documents|career_detail",Usar cuando pregunten detalle por carrera no validado en CSV
+servicio_social_detalle_por_carrera,pendiente_validacion,todos,career_detail,No afirmar detalle por carrera; usar respuesta_requisitos_especificos_ss_practicas
+practicas_detalle_por_carrera,pendiente_validacion,todos,career_detail,No afirmar detalle por carrera; política general garantizadas sí
+documentos_extra_salud,pendiente_validacion,todos,documents,No listar documentos extra salud hasta validación
+resumen_ia_usar_en_wa,false,todos,content,Columna Resumen IA v2 excluida de respuestas WA automáticas
+claim_marketing_nasa,pending_validation,true,todos,content,Excluir de respuestas WA (ej. Sistemas Resumen IA)
+claim_marketing_7_paises,pending_validation,true,todos,content,Excluir de respuestas WA (ej. Gastronomía Resumen IA)
+claim_marketing_trilingue,pending_validation,true,todos,content,Excluir de respuestas WA (ej. Negocios Internacionales Resumen IA)
+claim_marketing_70_practica_derecho,pending_validation,true,todos,content,Excluir de respuestas WA hasta validación
+revalidacion_equivalencias,pendiente_validacion,todos,revalidation,Proceso de equivalencias: texto oficial pendiente en CSV madre
+titulacion_rvoe_sep,pendiente_validacion,todos,titulation,Política general de titulación: pendiente_validacion en CSV madre
+intercambio_internacional,pending_validation,true,todos,exchange,Claims de intercambio no validados para WA automático

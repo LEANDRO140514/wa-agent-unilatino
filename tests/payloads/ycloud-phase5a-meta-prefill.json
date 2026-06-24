@@ -1,0 +1,104 @@
+{
+  "name": "phase5a_meta_prefill",
+  "description": "Fase 5A — Meta Click to WhatsApp prefill y separación duda_test (dry-run)",
+  "phase": "5A",
+  "meta_campaign": {
+    "angle": "¿No sabes qué carrera estudiar?",
+    "destination_whatsapp": "+529994538421",
+    "prefill_message": "Hola, quiero hacer el test vocacional",
+    "objective": "Mensajes / Click to WhatsApp"
+  },
+  "safe_mode": {
+    "WA_AGENT_MODE": "mock",
+    "GHL_SYNC_MODE": "dry_run",
+    "GHL_WRITE_CUSTOM_FIELDS": "false"
+  },
+  "cases": [
+    {
+      "id": "5a_01_meta_prefill",
+      "message_text": "Hola, quiero hacer el test vocacional",
+      "payload": {
+        "from": "+525551200001",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Hola, quiero hacer el test vocacional"
+      },
+      "expected": {
+        "intent": "no_se_que_estudiar",
+        "tags": ["eva-wa", "wa_interes_test"],
+        "wa_stage": "test_recomendado",
+        "wa_needs_human": false,
+        "priority": "low",
+        "escalation_required": false,
+        "task": false,
+        "response_contains": ["test vocacional", "testunilatino.algorithmus.io"]
+      }
+    },
+    {
+      "id": "5a_02_iniciar_test",
+      "message_text": "Quiero iniciar el test vocacional",
+      "payload": {
+        "from": "+525551200002",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Quiero iniciar el test vocacional"
+      },
+      "expected": {
+        "intent": "no_se_que_estudiar",
+        "tags": ["eva-wa", "wa_interes_test"],
+        "wa_stage": "test_recomendado",
+        "task": false
+      }
+    },
+    {
+      "id": "5a_03_descubrir_carrera",
+      "message_text": "Quiero descubrir qué carrera estudiar",
+      "payload": {
+        "from": "+525551200003",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Quiero descubrir qué carrera estudiar"
+      },
+      "expected": {
+        "intent": "no_se_que_estudiar",
+        "tags": ["eva-wa", "wa_interes_test"],
+        "wa_stage": "test_recomendado",
+        "task": false
+      }
+    },
+    {
+      "id": "5a_04_no_abre",
+      "message_text": "No abre el test",
+      "payload": {
+        "from": "+525551200004",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "No abre el test"
+      },
+      "expected": {
+        "intent": "duda_test",
+        "tags": ["eva-wa", "wa_duda_test"],
+        "wa_stage": "soporte_test",
+        "wa_needs_human": true,
+        "task": true,
+        "task_title": "Atender lead WhatsApp — Soporte test vocacional"
+      }
+    },
+    {
+      "id": "5a_05_se_trabo",
+      "message_text": "Se trabó el test",
+      "payload": {
+        "from": "+525551200005",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Se trabó el test"
+      },
+      "expected": {
+        "intent": "duda_test",
+        "tags": ["eva-wa", "wa_duda_test"],
+        "wa_stage": "soporte_test",
+        "task": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "phase3b_live_humano_single",
+  "description": "Prueba live única GHL — Quiero hablar con un asesor",
+  "phone": "+529991525583",
+  "expected_intent": "humano",
+  "expected_tags": ["eva-wa", "wa_requiere_asesor"],
+  "expected_task": true,
+  "payload": {
+    "from": "+529991525583",
+    "to": "+529994538421",
+    "message_type": "text",
+    "message_text": "Quiero hablar con un asesor"
+  }
+}

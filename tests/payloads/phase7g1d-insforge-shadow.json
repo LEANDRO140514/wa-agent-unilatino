@@ -1,0 +1,68 @@
+{
+  "phase": "7G.1D",
+  "description": "InsForge deploy smoke — Eva LLM shadow/fake, mock/dry_run obligatorio",
+  "endpoint": "https://ernkyni3.us-east.insforge.app/functions/ycloud-wa-inbound",
+  "from": "+52555720001",
+  "to": "+529994538421",
+  "required_runtime_flags": {
+    "mode": "mock",
+    "outbound_real": false,
+    "ghl_live": false,
+    "ghl_dry_run": true,
+    "custom_fields_written": false,
+    "academic_engine_enabled": true,
+    "eva_llm_enabled": true,
+    "eva_llm_mode": "shadow",
+    "eva_llm_rephrased": false
+  },
+  "cases": [
+    {
+      "id": 1,
+      "input": "1",
+      "expect_wa_intent": "carreras_disponibles",
+      "expect_academic_enriched": true,
+      "expect_suggested": true,
+      "response_must_include": ["opciones oficiales"]
+    },
+    {
+      "id": 2,
+      "input": "Derecho online",
+      "expect_wa_intent": "carrera_interes",
+      "expect_academic_enriched": true,
+      "expect_suggested": true,
+      "response_must_include": ["Derecho", "1,980"]
+    },
+    {
+      "id": 3,
+      "input": "Tengo promedio 9.8, qué beca me toca",
+      "expect_wa_intent": "beca",
+      "expect_academic_enriched": true,
+      "expect_suggested": true,
+      "response_must_include": ["50%", "inscripción"]
+    },
+    {
+      "id": 4,
+      "input": "No sé qué estudiar",
+      "expect_wa_intent": "no_se_que_estudiar",
+      "expect_academic_skipped": true,
+      "expect_suggested": true,
+      "response_must_include": ["test vocacional"]
+    },
+    {
+      "id": 5,
+      "input": "Quiero hablar con asesor",
+      "expect_wa_intent": "humano",
+      "expect_academic_skipped": true,
+      "expect_suggested": true,
+      "response_must_include": ["asesor"]
+    },
+    {
+      "id": 6,
+      "input": "SHADOW_INVENT_TEST",
+      "expect_wa_intent": "ambiguo",
+      "expect_suggested": true,
+      "expect_guardrail_warnings": true,
+      "response_must_include": ["Eva", "Carreras disponibles"]
+    }
+  ]
+}

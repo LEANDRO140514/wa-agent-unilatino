@@ -1,0 +1,70 @@
+{
+  "description": "Fase 3C-prep — valores lógicos WA custom fields (sin field IDs GHL, sin llamadas API)",
+  "phase": "3C-prep",
+  "ghl_sync_mode": "dry_run",
+  "ghl_write_custom_fields": false,
+  "contact_example": {
+    "ghl_contact_id": "ZPqb7Jit2zn64uaME9Cp",
+    "phone": "+529991525583"
+  },
+  "scenarios": [
+    {
+      "id": "3c_humano_logical_values",
+      "intent": "humano",
+      "message_text": "Quiero hablar con un asesor",
+      "response_text": "Te voy a pasar con un asesor academico para continuar el proceso por WhatsApp.",
+      "needs_human": true,
+      "customFields_logical": {
+        "wa_last_intent": "humano",
+        "wa_last_message_at": "2026-06-18T05:19:46.310Z",
+        "wa_stage": "humano",
+        "wa_needs_human": true,
+        "wa_summary": "Intent: humano — Quiero hablar con un asesor",
+        "wa_source": "YCloud / Eva WA",
+        "wa_last_inbound_text": "Quiero hablar con un asesor",
+        "wa_last_outbound_text": "Te voy a pasar con un asesor academico para continuar el proceso por WhatsApp."
+      },
+      "customFields_ghl_api_shape_example": [
+        { "id": "{{GHL_CF_ID_WA_LAST_INTENT}}", "value": "humano" },
+        { "id": "{{GHL_CF_ID_WA_LAST_MESSAGE_AT}}", "value": "2026-06-18T05:19:46.310Z" },
+        { "id": "{{GHL_CF_ID_WA_STAGE}}", "value": "humano" },
+        { "id": "{{GHL_CF_ID_WA_NEEDS_HUMAN}}", "value": "true" },
+        { "id": "{{GHL_CF_ID_WA_SUMMARY}}", "value": "Intent: humano — Quiero hablar con un asesor" },
+        { "id": "{{GHL_CF_ID_WA_SOURCE}}", "value": "YCloud / Eva WA" },
+        { "id": "{{GHL_CF_ID_WA_LAST_INBOUND_TEXT}}", "value": "Quiero hablar con un asesor" },
+        { "id": "{{GHL_CF_ID_WA_LAST_OUTBOUND_TEXT}}", "value": "Te voy a pasar con un asesor academico para continuar el proceso por WhatsApp." }
+      ],
+      "put_contact_endpoint": "PUT /contacts/ZPqb7Jit2zn64uaME9Cp",
+      "must_not_include": [
+        "carrera_recomendada",
+        "match_percent",
+        "beca_elegible",
+        "email",
+        "firstName",
+        "lastName"
+      ]
+    },
+    {
+      "id": "3c_no_se_que_estudiar_logical_values",
+      "intent": "no_se_que_estudiar",
+      "message_text": "No sé qué estudiar",
+      "needs_human": false,
+      "customFields_logical": {
+        "wa_last_intent": "no_se_que_estudiar",
+        "wa_last_message_at": "2026-06-18T05:36:54.000Z",
+        "wa_stage": "no_se_que_estudiar",
+        "wa_needs_human": false,
+        "wa_summary": "Intent: no_se_que_estudiar — No sé qué estudiar",
+        "wa_source": "YCloud / Eva WA",
+        "wa_last_inbound_text": "No sé qué estudiar",
+        "wa_last_outbound_text": "Claro 😊 Si todavia no sabes que estudiar, te recomiendo hacer primero el test vocacional de EVA..."
+      },
+      "task_expected": false
+    }
+  ],
+  "truncation_rules": {
+    "wa_summary_max_chars": 500,
+    "wa_last_inbound_text_max_chars": 500,
+    "wa_last_outbound_text_max_chars": 500
+  }
+}

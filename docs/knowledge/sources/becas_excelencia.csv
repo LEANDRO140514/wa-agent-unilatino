@@ -1,0 +1,6 @@
+promedio_min,promedio_max,beca_colegiatura_pct,descuento_inscripcion_pct,etiqueta,notas
+9.60,10.00,50,50,Sobresaliente,Beca sobre colegiatura y 50% descuento inscripción; sujeto a validación de admisiones
+9.00,9.59,40,50,Muy alto,Beca sobre colegiatura y 50% descuento inscripción; sujeto a validación de admisiones
+8.50,8.99,30,50,Alto,Beca sobre colegiatura y 50% descuento inscripción; sujeto a validación de admisiones
+7.00,8.49,0,50,Base,50% descuento inscripción; sujeto a validación de admisiones
+0,6.99,0,0,Sin beca automática,Canalizar a asesor para revisar alternativas

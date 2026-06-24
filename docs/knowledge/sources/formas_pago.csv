@@ -1,0 +1,5 @@
+clave,disponible,descripcion,notas
+mensualidades,si,Pago en mensualidades,
+pago_anual_descuento,si,Pago anual con descuento,Monto del descuento: pendiente_validacion
+pago_semestral_descuento,si,Pago semestral con descuento,Monto del descuento: pendiente_validacion
+msi_tarjeta,no,Meses sin intereses con tarjeta de crédito,No documentado como opción institucional

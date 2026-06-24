@@ -1,0 +1,64 @@
+{
+  "name": "phase3c_live_custom_fields_humano_single",
+  "description": "Prueba live única GHL custom fields WA — Quiero hablar con un asesor (requiere GHL_SYNC_MODE=live + GHL_WRITE_CUSTOM_FIELDS=true)",
+  "phase": "3C-live",
+  "phone": "+529991525583",
+  "ghl_contact_id_example": "ZPqb7Jit2zn64uaME9Cp",
+  "expected_intent": "humano",
+  "expected_tags": ["eva-wa", "wa_requiere_asesor"],
+  "expected_task": true,
+  "required_secrets_for_live": {
+    "GHL_SYNC_MODE": "live",
+    "GHL_WRITE_CUSTOM_FIELDS": "true",
+    "WA_AGENT_MODE": "mock",
+    "GHL_WA_FIELD_MAP": "8 WA field IDs (validated)"
+  },
+  "safe_defaults_dry_run": {
+    "GHL_SYNC_MODE": "dry_run",
+    "GHL_WRITE_CUSTOM_FIELDS": "false",
+    "WA_AGENT_MODE": "mock"
+  },
+  "payload": {
+    "from": "+529991525583",
+    "to": "+529994538421",
+    "message_type": "text",
+    "message_text": "Quiero hablar con un asesor"
+  },
+  "expected_custom_fields_logical": {
+    "wa_last_intent": "humano",
+    "wa_stage": "humano",
+    "wa_needs_human": "true",
+    "wa_source": "YCloud / Eva WA",
+    "wa_last_inbound_text": "Quiero hablar con un asesor"
+  },
+  "ghl_put_shape": {
+    "method": "PUT",
+    "endpoint": "/contacts/:contactId",
+    "body": {
+      "customFields": [
+        { "id": "{{from GHL_WA_FIELD_MAP}}", "value": "..." }
+      ]
+    },
+    "field_count": 8
+  },
+  "must_not_write": [
+    "carrera_recomendada",
+    "beca_elegible",
+    "lead_score",
+    "promedio",
+    "dictamen_url",
+    "email",
+    "firstName",
+    "lastName",
+    "yBz675YEp1pdvwnvloXP",
+    "wa_test_checkbox_a"
+  ],
+  "dry_run_expectations": {
+    "custom_fields_map_valid": true,
+    "custom_fields_enabled": false,
+    "custom_fields_written": false,
+    "custom_fields_skipped_reason": "ghl_sync_mode_not_live",
+    "ghl_live": false,
+    "outbound_real": false
+  }
+}

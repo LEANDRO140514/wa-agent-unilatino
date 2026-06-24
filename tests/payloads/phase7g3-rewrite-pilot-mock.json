@@ -1,0 +1,240 @@
+{
+  "phase": "7G.3",
+  "description": "Piloto controlado rewrite mock/dry_run — variedad de mensajes simulados",
+  "endpoint": "https://ernkyni3.us-east.insforge.app/functions/ycloud-wa-inbound",
+  "from": "+52555740001",
+  "to": "+529994538421",
+  "required_runtime_flags": {
+    "mode": "mock",
+    "outbound_real": false,
+    "ghl_live": false,
+    "ghl_dry_run": true,
+    "custom_fields_written": false,
+    "academic_engine_enabled": true,
+    "eva_llm_enabled": true,
+    "eva_llm_mode": "rewrite",
+    "eva_llm_provider": "openai",
+    "openai_api_key_configured": true
+  },
+  "expected_model": "gpt-4o-mini",
+  "rewrite_allowlist": [
+    "carreras_disponibles",
+    "carrera_interes",
+    "no_se_que_estudiar",
+    "humano"
+  ],
+  "blocked_intents": [
+    "beca",
+    "post_test",
+    "duda_test",
+    "sin_texto",
+    "ambiguo"
+  ],
+  "cases": [
+    {
+      "id": "A1",
+      "group": "carreras_disponibles",
+      "input": "1",
+      "expect_wa_intent": "carreras_disponibles",
+      "expect_rewrite_allowed": true,
+      "response_must_include": ["opciones oficiales", "Derecho"]
+    },
+    {
+      "id": "A2",
+      "group": "carreras_disponibles",
+      "input": "Qué carreras tienen",
+      "expect_wa_intent": "ambiguo",
+      "expect_rewrite_allowed": false,
+      "expect_block_reason": "blocked_intent"
+    },
+    {
+      "id": "A3",
+      "group": "carreras_disponibles",
+      "input": "Me puedes decir sus licenciaturas",
+      "expect_wa_intent": "ambiguo",
+      "expect_rewrite_allowed": false,
+      "expect_block_reason": "blocked_intent"
+    },
+    {
+      "id": "A4",
+      "group": "carreras_disponibles",
+      "input": "Carreras disponibles",
+      "expect_wa_intent": "carreras_disponibles",
+      "expect_rewrite_allowed": true,
+      "response_must_include": ["opciones oficiales"]
+    },
+    {
+      "id": "A5",
+      "group": "carreras_disponibles",
+      "input": "Oferta académica",
+      "expect_wa_intent": "ambiguo",
+      "expect_rewrite_allowed": false,
+      "expect_block_reason": "blocked_intent"
+    },
+    {
+      "id": "B1",
+      "group": "carrera_interes",
+      "input": "Derecho online",
+      "expect_wa_intent": "carrera_interes",
+      "expect_rewrite_allowed": true,
+      "response_must_include": ["Derecho", "1,980"]
+    },
+    {
+      "id": "B2",
+      "group": "carrera_interes",
+      "input": "Me interesa Psicología",
+      "expect_wa_intent": "carrera_interes",
+      "expect_rewrite_allowed": true,
+      "response_must_include": ["Psicolog"]
+    },
+    {
+      "id": "B3",
+      "group": "carrera_interes",
+      "input": "Tienen Enfermería",
+      "expect_wa_intent": "carrera_interes",
+      "expect_rewrite_allowed": true,
+      "response_must_include": ["Enfermer"]
+    },
+    {
+      "id": "B4",
+      "group": "carrera_interes",
+      "input": "Quiero estudiar Administración",
+      "expect_wa_intent": "carrera_interes",
+      "expect_rewrite_allowed": true,
+      "response_must_include": ["Administraci"]
+    },
+    {
+      "id": "B5",
+      "group": "carrera_interes",
+      "input": "Arquitectura presencial",
+      "expect_wa_intent": "carrera_interes",
+      "expect_rewrite_allowed": true,
+      "response_must_include": ["Presencial", "4,650"]
+    },
+    {
+      "id": "C1",
+      "group": "no_se_que_estudiar",
+      "input": "No sé qué estudiar",
+      "expect_wa_intent": "no_se_que_estudiar",
+      "expect_rewrite_allowed": true,
+      "response_must_include": ["test vocacional", "testunilatino"]
+    },
+    {
+      "id": "C2",
+      "group": "no_se_que_estudiar",
+      "input": "No sé qué carrera elegir",
+      "expect_wa_intent": "no_se_que_estudiar",
+      "expect_rewrite_allowed": true,
+      "response_must_include": ["test vocacional", "testunilatino"]
+    },
+    {
+      "id": "C3",
+      "group": "no_se_que_estudiar",
+      "input": "Quiero hacer el test",
+      "expect_wa_intent": "no_se_que_estudiar",
+      "expect_rewrite_allowed": true,
+      "response_must_include": ["testunilatino"]
+    },
+    {
+      "id": "C4",
+      "group": "no_se_que_estudiar",
+      "input": "Me puedes orientar",
+      "expect_wa_intent": "ambiguo",
+      "expect_rewrite_allowed": false,
+      "expect_block_reason": "blocked_intent"
+    },
+    {
+      "id": "C5",
+      "group": "no_se_que_estudiar",
+      "input": "Estoy indeciso",
+      "expect_wa_intent": "no_se_que_estudiar",
+      "expect_rewrite_allowed": true,
+      "response_must_include": ["test vocacional"]
+    },
+    {
+      "id": "D1",
+      "group": "humano",
+      "input": "Quiero hablar con asesor",
+      "expect_wa_intent": "humano",
+      "expect_rewrite_allowed": true,
+      "expect_needs_human": true,
+      "expect_create_task": true,
+      "response_must_include": ["asesor"]
+    },
+    {
+      "id": "D2",
+      "group": "humano",
+      "input": "Me puede llamar alguien",
+      "expect_wa_intent": "ambiguo",
+      "expect_rewrite_allowed": false,
+      "expect_block_reason": "blocked_intent"
+    },
+    {
+      "id": "D3",
+      "group": "humano",
+      "input": "Necesito que me atienda una persona",
+      "expect_wa_intent": "humano",
+      "expect_rewrite_allowed": true,
+      "expect_needs_human": true,
+      "expect_create_task": true,
+      "response_must_include": ["asesor"]
+    },
+    {
+      "id": "D4",
+      "group": "humano",
+      "input": "Quiero informes por un asesor",
+      "expect_wa_intent": "humano",
+      "expect_rewrite_allowed": true,
+      "expect_needs_human": true,
+      "response_must_include": ["asesor"]
+    },
+    {
+      "id": "E1",
+      "group": "blocked",
+      "input": "Tengo promedio 9.8, qué beca me toca",
+      "expect_wa_intent": "beca",
+      "expect_rewrite_allowed": false,
+      "expect_rephrased": false,
+      "expect_block_reason": "scholarship_blocked",
+      "response_must_include": ["50%", "9.8"]
+    },
+    {
+      "id": "E2",
+      "group": "blocked",
+      "input": "Ya hice el test",
+      "expect_wa_intent": "post_test",
+      "expect_rewrite_allowed": false,
+      "expect_rephrased": false,
+      "expect_block_reason": "blocked_intent"
+    },
+    {
+      "id": "E3",
+      "group": "blocked",
+      "input": "Se trabó el test",
+      "expect_wa_intent": "duda_test",
+      "expect_rewrite_allowed": false,
+      "expect_rephrased": false,
+      "expect_block_reason": "blocked_intent"
+    },
+    {
+      "id": "E4",
+      "group": "blocked",
+      "message_type": "image",
+      "input": "",
+      "expect_wa_intent": "sin_texto",
+      "expect_rewrite_allowed": false,
+      "expect_rephrased": false,
+      "expect_block_reason": "skipped_intent"
+    },
+    {
+      "id": "E5",
+      "group": "blocked",
+      "input": "SHADOW_INVENT_TEST",
+      "expect_wa_intent": "ambiguo",
+      "expect_rewrite_allowed": false,
+      "expect_rephrased": false,
+      "expect_block_reason": "blocked_intent",
+      "expect_guardrail_warnings": true
+    }
+  ]
+}

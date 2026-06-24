@@ -1,0 +1,100 @@
+[
+  {
+    "id": "case-01",
+    "description": "Hola, quiero informacion",
+    "payload": {
+      "event_type": "whatsapp.inbound_message.received",
+      "from": "5512345678",
+      "to": "525511112222",
+      "message_id": "msg-case-01",
+      "message_type": "text",
+      "message_text": "Hola, quiero informacion",
+      "timestamp": "2026-06-17T09:31:10.000Z"
+    },
+    "expected_intent": "ambiguo"
+  },
+  {
+    "id": "case-02",
+    "description": "No se que estudiar",
+    "payload": {
+      "event_type": "whatsapp.inbound_message.received",
+      "from": "5215512345678",
+      "to": "525511112222",
+      "message_id": "msg-case-02",
+      "message_type": "text",
+      "message_text": "No se que estudiar",
+      "timestamp": "2026-06-17T09:31:20.000Z"
+    },
+    "expected_intent": "no_se_que_estudiar"
+  },
+  {
+    "id": "case-03",
+    "description": "Tengo promedio 9.3, que beca me toca",
+    "payload": {
+      "event_type": "whatsapp.inbound_message.received",
+      "from": "+52 (55) 7654-3210",
+      "to": "525511112222",
+      "message_id": "msg-case-03",
+      "message_type": "text",
+      "message_text": "Tengo promedio 9.3, que beca me toca",
+      "timestamp": "2026-06-17T09:31:30.000Z"
+    },
+    "expected_intent": "beca"
+  },
+  {
+    "id": "case-04",
+    "description": "Me interesa Derecho",
+    "payload": {
+      "event_type": "whatsapp.inbound_message.received",
+      "from": "5544455566",
+      "to": "525511112222",
+      "message_id": "msg-case-04",
+      "message_type": "text",
+      "message_text": "Me interesa Derecho",
+      "timestamp": "2026-06-17T09:31:40.000Z"
+    },
+    "expected_intent": "ambiguo"
+  },
+  {
+    "id": "case-05",
+    "description": "Ya hice el test",
+    "payload": {
+      "event_type": "whatsapp.inbound_message.received",
+      "from": "5522244466",
+      "to": "525511112222",
+      "message_id": "msg-case-05",
+      "message_type": "text",
+      "message_text": "Ya hice el test",
+      "timestamp": "2026-06-17T09:31:50.000Z"
+    },
+    "expected_intent": "post_test"
+  },
+  {
+    "id": "case-06",
+    "description": "Quiero hablar con un asesor",
+    "payload": {
+      "event_type": "whatsapp.inbound_message.received",
+      "from": "5533344455",
+      "to": "525511112222",
+      "message_id": "msg-case-06",
+      "message_type": "text",
+      "message_text": "Quiero hablar con un asesor",
+      "timestamp": "2026-06-17T09:32:00.000Z"
+    },
+    "expected_intent": "humano"
+  },
+  {
+    "id": "case-07",
+    "description": "Se trabo el test",
+    "payload": {
+      "event_type": "whatsapp.inbound_message.received",
+      "from": "5511998877",
+      "to": "525511112222",
+      "message_id": "msg-case-07",
+      "message_type": "text",
+      "message_text": "Se trabo el test",
+      "timestamp": "2026-06-17T09:32:10.000Z"
+    },
+    "expected_intent": "duda_test"
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "id": "evt_6a3374c5a712035cd725d4dd",
+  "type": "whatsapp.inbound_message.received",
+  "apiVersion": "v2",
+  "createTime": "2026-06-18T04:32:05.472Z",
+  "whatsappInboundMessage": {
+    "id": "6a3374c553bdfa4eb63b792a",
+    "to": "+529994538421",
+    "from": "+529991525583",
+    "text": {
+      "body": "Hola prueba webhook"
+    },
+    "type": "text",
+    "wamid": "wamid.REDACTED",
+    "wabaId": "1030437279324035",
+    "sendTime": "2026-06-18T04:32:00.000Z",
+    "fromUserId": "MX.REDACTED",
+    "customerProfile": {
+      "name": "REDACTED"
+    }
+  }
+}

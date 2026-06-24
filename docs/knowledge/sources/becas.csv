@@ -1,0 +1,6 @@
+promedio_min,promedio_max,beca_colegiatura_pct,descuento_inscripcion_pct,notas
+9.60,10.00,50,50,Beca de excelencia
+9.00,9.59,40,50,Beca de excelencia
+8.50,8.99,30,50,Beca de excelencia
+7.00,8.49,0,50,Solo descuento inscripcion
+0,6.99,0,0,Canalizar asesor

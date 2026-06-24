@@ -1,0 +1,156 @@
+{
+  "name": "phase4a_intent_matrix",
+  "description": "Fase 4A — Matriz oficial Eva WA intents, respuestas, tags, stages y tasks (dry-run)",
+  "phase": "4A",
+  "safe_mode": {
+    "WA_AGENT_MODE": "mock",
+    "GHL_SYNC_MODE": "dry_run",
+    "GHL_WRITE_CUSTOM_FIELDS": "false"
+  },
+  "eva_test_url": "https://testunilatino.algorithmus.io",
+  "cases": [
+    {
+      "id": "4a_01_ambiguo",
+      "message_text": "Hola, quiero información",
+      "payload": {
+        "from": "+525551000001",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Hola, quiero información"
+      },
+      "expected": {
+        "intent": "ambiguo",
+        "tags": ["eva-wa", "wa_interes_info"],
+        "wa_stage": "inicio",
+        "wa_needs_human": false,
+        "task": false,
+        "response_contains": ["Soy Eva", "Carreras disponibles"]
+      }
+    },
+    {
+      "id": "4a_02_no_se_que_estudiar",
+      "message_text": "No sé qué estudiar",
+      "payload": {
+        "from": "+525551000002",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "No sé qué estudiar"
+      },
+      "expected": {
+        "intent": "no_se_que_estudiar",
+        "tags": ["eva-wa", "wa_interes_test"],
+        "wa_stage": "test_recomendado",
+        "wa_needs_human": false,
+        "task": false,
+        "response_contains": ["test vocacional", "testunilatino.algorithmus.io"]
+      }
+    },
+    {
+      "id": "4a_03_carrera_interes",
+      "message_text": "Me interesa Derecho",
+      "payload": {
+        "from": "+525551000003",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Me interesa Derecho"
+      },
+      "expected": {
+        "intent": "carrera_interes",
+        "tags": ["eva-wa", "wa_interes_carrera"],
+        "wa_stage": "carrera_interes",
+        "wa_needs_human": false,
+        "task": false,
+        "response_contains": ["Excelente", "orientar sobre esa carrera"]
+      }
+    },
+    {
+      "id": "4a_04_beca",
+      "message_text": "Tengo promedio 9.3, quiero beca",
+      "payload": {
+        "from": "+525551000004",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Tengo promedio 9.3, quiero beca"
+      },
+      "expected": {
+        "intent": "beca",
+        "tags": ["eva-wa", "wa_interes_beca"],
+        "wa_stage": "beca_interes",
+        "wa_needs_human": true,
+        "task": true,
+        "response_contains": ["beca y apoyo", "asesor puede revisar"]
+      }
+    },
+    {
+      "id": "4a_05_post_test",
+      "message_text": "Ya hice el test y me salió Derecho",
+      "payload": {
+        "from": "+525551000005",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Ya hice el test y me salió Derecho"
+      },
+      "expected": {
+        "intent": "post_test",
+        "tags": ["eva-wa", "wa_post_test"],
+        "wa_stage": "post_test",
+        "wa_needs_human": true,
+        "task": true,
+        "response_contains": ["Perfecto", "asesor académico"]
+      }
+    },
+    {
+      "id": "4a_06_humano",
+      "message_text": "Quiero hablar con un asesor",
+      "payload": {
+        "from": "+525551000006",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Quiero hablar con un asesor"
+      },
+      "expected": {
+        "intent": "humano",
+        "tags": ["eva-wa", "wa_requiere_asesor"],
+        "wa_stage": "asesor_requerido",
+        "wa_needs_human": true,
+        "task": true,
+        "response_contains": ["canalizar con un asesor"]
+      }
+    },
+    {
+      "id": "4a_07_duda_test",
+      "message_text": "Se trabó el test",
+      "payload": {
+        "from": "+525551000007",
+        "to": "+529994538421",
+        "message_type": "text",
+        "message_text": "Se trabó el test"
+      },
+      "expected": {
+        "intent": "duda_test",
+        "tags": ["eva-wa", "wa_duda_test"],
+        "wa_stage": "soporte_test",
+        "wa_needs_human": true,
+        "task": true,
+        "response_contains": ["marcar tu caso", "testunilatino.algorithmus.io"]
+      }
+    },
+    {
+      "id": "4a_08_sin_texto",
+      "message_text": null,
+      "payload": {
+        "from": "+525551000008",
+        "to": "+529994538421",
+        "message_type": "image"
+      },
+      "expected": {
+        "intent": "sin_texto",
+        "tags": ["eva-wa", "wa_sin_texto"],
+        "wa_stage": "pendiente_texto",
+        "wa_needs_human": false,
+        "task": false,
+        "response_contains": ["escribes tu duda en texto"]
+      }
+    }
+  ]
+}

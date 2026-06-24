@@ -1,0 +1,130 @@
+{
+  "phase": "7B.2",
+  "description": "Academic-engine static tests against SOURCE_OF_TRUTH",
+  "cases": [
+    {
+      "id": 1,
+      "input": "1",
+      "expect_intent": "career_list",
+      "response_must_include": ["opciones oficiales", "programas académicos"],
+      "response_must_not_include": ["1. Carreras", "contaduría", "arquitectura"]
+    },
+    {
+      "id": 2,
+      "input": "Carreras disponibles",
+      "expect_intent": "career_list",
+      "response_must_include": ["Derecho", "Psicología"],
+      "response_must_not_include": ["contaduría", "criminología"]
+    },
+    {
+      "id": 3,
+      "input": "¿Cuántas carreras tienen?",
+      "expect_intent": "career_list",
+      "response_must_include": ["9", "12"]
+    },
+    {
+      "id": 4,
+      "input": "¿Son 12 carreras diferentes?",
+      "expect_intent": "career_list",
+      "response_must_include": ["9 programas", "12 combinaciones"]
+    },
+    {
+      "id": 5,
+      "input": "Quiero estudiar Psicología",
+      "expect_intent": "career_detail",
+      "response_must_include": ["Psicología", "4,650", "8,000", "RVOE"]
+    },
+    {
+      "id": 6,
+      "input": "Derecho online",
+      "expect_intent": "career_detail",
+      "response_must_include": ["Derecho", "línea", "1,980"]
+    },
+    {
+      "id": 7,
+      "input": "¿Cuánto cuesta Derecho online?",
+      "expect_intent": "career_detail",
+      "response_must_include": ["1,980", "3,600", "RVOE"]
+    },
+    {
+      "id": 8,
+      "input": "Carreras en línea",
+      "expect_intent": "modality_filter",
+      "response_must_include": ["línea", "1,980"]
+    },
+    {
+      "id": 9,
+      "input": "Tengo promedio 9.8, ¿qué beca me toca?",
+      "expect_intent": "scholarship",
+      "response_must_include": ["50%", "inscripción", "Sobresaliente", "validación"]
+    },
+    {
+      "id": 10,
+      "input": "Tengo promedio 8.2, ¿qué apoyo tengo?",
+      "expect_intent": "scholarship",
+      "response_must_include": ["50%", "inscripción", "Base"]
+    },
+    {
+      "id": 11,
+      "input": "¿Tienen meses sin intereses?",
+      "expect_intent": "payment",
+      "response_must_include": ["no está documentado", "Meses sin intereses"]
+    },
+    {
+      "id": 12,
+      "input": "¿Qué documentos necesito?",
+      "expect_intent": "documents",
+      "response_must_include": ["Acta de nacimiento", "CURP"]
+    },
+    {
+      "id": 13,
+      "input": "¿Cómo me inscribo?",
+      "expect_intent": "admission",
+      "response_must_include": ["Proceso de admisión", "inscripción"]
+    },
+    {
+      "id": 14,
+      "input": "¿Qué horarios tienen?",
+      "expect_intent": "schedule",
+      "response_must_include": ["Presencial", "línea", "Sabatina"]
+    },
+    {
+      "id": 15,
+      "input": "¿Cuál es su WhatsApp?",
+      "expect_intent": "contact",
+      "response_must_include": ["+52 999 453 8421", "informes@universidadlatino.edu.mx", "07:00-21:00"]
+    },
+    {
+      "id": 16,
+      "input": "¿Tienen prácticas profesionales?",
+      "expect_intent": "faq",
+      "response_must_include": ["prácticas profesionales garantizadas"]
+    },
+    {
+      "id": 17,
+      "input": "¿En Enfermería piden campos clínicos?",
+      "expect_intent": "career_detail",
+      "response_must_include": ["canalizar con un asesor", "carrera que te interesa"]
+    },
+    {
+      "id": 18,
+      "input": "NASA",
+      "expect_intent": "fallback",
+      "response_must_not_include": ["nasa", "NASA", "Space Apps"]
+    },
+    {
+      "id": 19,
+      "input": "No sé qué estudiar",
+      "expect_intent": "fallback",
+      "adapter_wa_intent": "no_se_que_estudiar",
+      "adapter_should_enrich": false
+    },
+    {
+      "id": 20,
+      "input": "Quiero hablar con un asesor",
+      "expect_intent": "fallback",
+      "adapter_wa_intent": "humano",
+      "adapter_should_enrich": false
+    }
+  ]
+}

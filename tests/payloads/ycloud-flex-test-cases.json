@@ -1,0 +1,131 @@
+[
+  {
+    "id": "flex-01",
+    "description": "Payload mock plano (regresion Fase 1)",
+    "payload": {
+      "event_type": "whatsapp.inbound_message.received",
+      "from": "5512345678",
+      "to": "525511112222",
+      "message_id": "msg-flex-01",
+      "message_type": "text",
+      "message_text": "Hola, quiero informacion",
+      "timestamp": "2026-06-17T10:00:00.000Z"
+    },
+    "expected": {
+      "http_status": 200,
+      "ok": true,
+      "intent": "ambiguo",
+      "skipped": false,
+      "insert_inbound": true
+    }
+  },
+  {
+    "id": "flex-02",
+    "description": "Payload YCloud nested message.text.body",
+    "payload": {
+      "id": "evt_flex_02",
+      "type": "whatsapp.inbound.message",
+      "apiVersion": "v2",
+      "createTime": "2026-06-17T10:01:00.000Z",
+      "whatsappInboundMessage": {
+        "id": "wamid.flex02",
+        "from": "5215511122233",
+        "to": "525511112222",
+        "type": "text",
+        "text": {
+          "body": "No se que estudiar"
+        },
+        "createTime": "2026-06-17T10:01:00.000Z"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "ok": true,
+      "intent": "no_se_que_estudiar",
+      "skipped": false,
+      "insert_inbound": true
+    }
+  },
+  {
+    "id": "flex-03",
+    "description": "Payload sin texto (imagen/audio)",
+    "payload": {
+      "id": "evt_flex_03",
+      "type": "whatsapp.inbound.message",
+      "apiVersion": "v2",
+      "createTime": "2026-06-17T10:02:00.000Z",
+      "whatsappInboundMessage": {
+        "id": "wamid.flex03",
+        "from": "5544433322",
+        "to": "525511112222",
+        "type": "image",
+        "image": {
+          "id": "media_123"
+        },
+        "createTime": "2026-06-17T10:02:00.000Z"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "ok": true,
+      "intent": "sin_texto",
+      "skipped": false,
+      "insert_inbound": true
+    }
+  },
+  {
+    "id": "flex-04",
+    "description": "Evento no inbound (status update)",
+    "payload": {
+      "id": "evt_flex_04",
+      "type": "whatsapp.message.updated",
+      "apiVersion": "v2",
+      "createTime": "2026-06-17T10:03:00.000Z",
+      "whatsappMessage": {
+        "id": "wamid.flex04",
+        "from": "525511112222",
+        "to": "5215512345678",
+        "type": "text",
+        "status": "delivered",
+        "text": {
+          "body": "Mensaje entregado"
+        }
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "ok": true,
+      "skipped": true,
+      "reason": "non_inbound_event",
+      "insert_inbound": false
+    }
+  },
+  {
+    "id": "flex-05",
+    "description": "Mensaje desde numero propio de negocio (simulado)",
+    "payload": {
+      "id": "evt_flex_05",
+      "type": "whatsapp.inbound.message",
+      "apiVersion": "v2",
+      "createTime": "2026-06-17T10:04:00.000Z",
+      "whatsappInboundMessage": {
+        "id": "wamid.flex05",
+        "from": "525511112222",
+        "to": "5215512345678",
+        "type": "text",
+        "text": {
+          "body": "Eco interno"
+        },
+        "createTime": "2026-06-17T10:04:00.000Z"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "ok": true,
+      "skipped": true,
+      "reason": "own_business_message",
+      "insert_inbound": false,
+      "requires_business_number": "525511112222"
+    }
+  }
+]

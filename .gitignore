@@ -1,0 +1,15 @@
+.env
+.env.*
+*.local
+node_modules/
+.cursor/
+agent-tools/
+agent-transcripts/
+*.log
+.DS_Store
+dist/
+insforge/functions/dist/
+*.deploy.js
+secrets/
+*.key
+*.pem

@@ -1,0 +1,61 @@
+{
+  "phase": "7D",
+  "description": "WhatsApp real controlado — academic-engine + GHL dry_run",
+  "endpoint": "https://ernkyni3.us-east.insforge.app/functions/ycloud-wa-inbound",
+  "from": "+529991525583",
+  "to": "+529994538421",
+  "required_runtime_flags": {
+    "mode": "live_outbound",
+    "ghl_live": false,
+    "ghl_dry_run": true,
+    "custom_fields_written": false,
+    "academic_engine_enabled": true,
+    "eva_llm_enabled": false,
+    "outbound_real": true
+  },
+  "ghost_careers": ["contaduría", "contaduria", "arquitectura", "criminología", "criminologia", "diseño", "diseno", "educación", "educacion"],
+  "cases": [
+    {
+      "id": 1,
+      "input": "1",
+      "expect_wa_intent": "carreras_disponibles",
+      "expect_academic_intent": "career_list",
+      "expect_academic_enriched": true,
+      "response_must_include": ["opciones oficiales", "programas académicos"],
+      "response_must_not_include": ["contaduría", "arquitectura", "criminología", "diseño", "educación"]
+    },
+    {
+      "id": 2,
+      "input": "Carreras disponibles",
+      "expect_wa_intent": "carreras_disponibles",
+      "expect_academic_intent": "career_list",
+      "expect_academic_enriched": true,
+      "response_must_include": ["Derecho", "Psicología", "opciones oficiales"]
+    },
+    {
+      "id": 3,
+      "input": "Derecho online",
+      "expect_wa_intent": "carrera_interes",
+      "expect_academic_intent": "career_detail",
+      "expect_academic_enriched": true,
+      "response_must_include": ["Derecho", "línea", "1,980", "RVOE"]
+    },
+    {
+      "id": 4,
+      "input": "Tengo promedio 9.8, qué beca me toca",
+      "expect_wa_intent": "beca",
+      "expect_academic_intent": "scholarship",
+      "expect_academic_enriched": true,
+      "response_must_include": ["50%", "inscripción", "Sobresaliente", "validación"]
+    },
+    {
+      "id": 5,
+      "input": "No sé qué estudiar",
+      "expect_wa_intent": "no_se_que_estudiar",
+      "expect_academic_enriched": false,
+      "expect_academic_skipped": true,
+      "response_must_include": ["test vocacional"],
+      "response_must_not_include": ["opciones oficiales"]
+    }
+  ]
+}

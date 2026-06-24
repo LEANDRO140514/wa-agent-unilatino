@@ -1,0 +1,9 @@
+{
+  "event_type": "whatsapp.inbound_message.received",
+  "from": "5512345678",
+  "to": "525511112222",
+  "message_id": "msg-sample-001",
+  "message_type": "text",
+  "message_text": "Hola, quiero informacion",
+  "timestamp": "2026-06-17T09:31:00.000Z"
+}

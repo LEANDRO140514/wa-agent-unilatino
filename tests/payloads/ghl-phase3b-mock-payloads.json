@@ -1,0 +1,186 @@
+{
+  "description": "Fixtures mock GHL API v2 para Fase 3B — sin llamadas reales. Usar en unit tests del helper live.",
+  "base_url": "https://services.leadconnectorhq.com",
+  "headers": {
+    "Authorization": "Bearer [REDACTED_GHL_API_KEY]",
+    "Version": "2021-07-28",
+    "Content-Type": "application/json"
+  },
+  "scenarios": [
+    {
+      "id": "search_contact_found",
+      "method": "POST",
+      "path": "/contacts/search",
+      "request": {
+        "locationId": "{{GHL_LOCATION_ID}}",
+        "pageLimit": 5,
+        "query": "+529991525583"
+      },
+      "response_mock": {
+        "contacts": [
+          {
+            "id": "ghl_contact_mock_001",
+            "phone": "+529991525583",
+            "email": "lead@test.example",
+            "firstName": "Maria",
+            "lastName": "Test",
+            "customFields": {
+              "carrera_recomendada": "Derecho",
+              "match_percent": "87",
+              "beca_elegible": "true",
+              "wa_last_intent": "post_test"
+            },
+            "tags": ["eva-test-completed"]
+          }
+        ],
+        "total": 1
+      },
+      "expected_action": "would_update_contact"
+    },
+    {
+      "id": "search_contact_not_found",
+      "method": "POST",
+      "path": "/contacts/search",
+      "request": {
+        "locationId": "{{GHL_LOCATION_ID}}",
+        "pageLimit": 5,
+        "query": "+525551009999"
+      },
+      "response_mock": {
+        "contacts": [],
+        "total": 0
+      },
+      "expected_action": "would_create_contact"
+    },
+    {
+      "id": "create_contact_minimal",
+      "method": "POST",
+      "path": "/contacts/",
+      "request": {
+        "locationId": "{{GHL_LOCATION_ID}}",
+        "phone": "+525551009999",
+        "source": "YCloud / Eva WA",
+        "tags": ["eva-wa", "wa_interes_info"],
+        "customFields": {
+          "wa_last_intent": "ambiguo",
+          "wa_last_message_at": "2026-06-18T12:00:00.000Z",
+          "wa_stage": "fase_3b_live",
+          "wa_needs_human": false,
+          "wa_summary": "Intent: ambiguo — Hola, quiero información"
+        }
+      },
+      "response_mock": {
+        "contact": {
+          "id": "ghl_contact_mock_new_001",
+          "phone": "+525551009999"
+        }
+      },
+      "protected_fields_must_not_be_in_request": [
+        "carrera_recomendada",
+        "match_percent",
+        "sector_principal",
+        "dictamen_url",
+        "test_completed_at",
+        "test_version",
+        "beca_elegible",
+        "lead_score",
+        "lead_class",
+        "promedio"
+      ]
+    },
+    {
+      "id": "update_contact_wa_fields_only",
+      "method": "PUT",
+      "path": "/contacts/ghl_contact_mock_001",
+      "request": {
+        "customFields": {
+          "wa_last_intent": "humano",
+          "wa_last_message_at": "2026-06-18T12:05:00.000Z",
+          "wa_stage": "humano",
+          "wa_needs_human": true,
+          "wa_summary": "Intent: humano — Quiero hablar con un asesor"
+        }
+      },
+      "response_mock": {
+        "contact": {
+          "id": "ghl_contact_mock_001",
+          "customFields": {
+            "carrera_recomendada": "Derecho",
+            "match_percent": "87",
+            "beca_elegible": "true",
+            "wa_last_intent": "humano",
+            "wa_needs_human": true
+          }
+        }
+      },
+      "assert_protected_unchanged": [
+        "carrera_recomendada",
+        "match_percent",
+        "beca_elegible"
+      ]
+    },
+    {
+      "id": "add_tags",
+      "method": "POST",
+      "path": "/contacts/ghl_contact_mock_001/tags",
+      "request": {
+        "tags": ["eva-wa", "wa_requiere_asesor"]
+      },
+      "response_mock": {
+        "tags": ["eva-test-completed", "eva-wa", "wa_requiere_asesor"]
+      }
+    },
+    {
+      "id": "create_note",
+      "method": "POST",
+      "path": "/contacts/ghl_contact_mock_001/notes",
+      "request": {
+        "body": "[Eva WA] 2026-06-18T12:05:00Z\nIntent: humano\nMensaje: Quiero hablar con un asesor\nFuente: YCloud / Eva WA"
+      },
+      "response_mock": {
+        "note": {
+          "id": "note_mock_001",
+          "body": "[Eva WA] 2026-06-18T12:05:00Z\nIntent: humano\nMensaje: Quiero hablar con un asesor\nFuente: YCloud / Eva WA"
+        }
+      }
+    },
+    {
+      "id": "create_task_humano",
+      "method": "POST",
+      "path": "/contacts/ghl_contact_mock_001/tasks",
+      "request": {
+        "title": "Atender lead WhatsApp — Universidad Latino",
+        "body": "Teléfono: +529991525583\nÚltima intención: humano\nÚltimo mensaje: Quiero hablar con un asesor\n¿Requiere asesor?: Sí\nFuente: YCloud / Eva WA",
+        "dueDate": "2026-06-18T12:05:00.000Z",
+        "completed": false
+      },
+      "response_mock": {
+        "task": {
+          "id": "task_mock_001",
+          "title": "Atender lead WhatsApp — Universidad Latino",
+          "contactId": "ghl_contact_mock_001",
+          "completed": false
+        }
+      }
+    },
+    {
+      "id": "search_duplicate_contacts",
+      "method": "POST",
+      "path": "/contacts/search",
+      "request": {
+        "locationId": "{{GHL_LOCATION_ID}}",
+        "pageLimit": 5,
+        "query": "+525551000001"
+      },
+      "response_mock": {
+        "contacts": [
+          { "id": "dup_a", "phone": "+525551000001" },
+          { "id": "dup_b", "phone": "+525551000001" }
+        ],
+        "total": 2
+      },
+      "expected_action": "skip_duplicate",
+      "expected_wa_needs_human": true
+    }
+  ]
+}

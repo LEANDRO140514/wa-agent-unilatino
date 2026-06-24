@@ -1,0 +1,89 @@
+{
+  "phase": "7G.1",
+  "description": "EVA LLM shadow mode — suggested vs factual, no user-facing LLM",
+  "env": {
+    "WA_AGENT_MODE": "mock",
+    "GHL_SYNC_MODE": "dry_run",
+    "GHL_WRITE_CUSTOM_FIELDS": "false",
+    "ACADEMIC_ENGINE_ENABLED": "true",
+    "EVA_LLM_ENABLED": "true",
+    "LLM_MODE": "shadow",
+    "LLM_PROVIDER": "fake",
+    "WA_E2E_MOCK_DB": "true",
+    "INSFORGE_BASE_URL": "http://mock-insforge.local",
+    "ANON_KEY": "mock-anon-key",
+    "YCLOUD_BUSINESS_NUMBER": "+529994538421",
+    "GHL_WA_FIELD_MAP": "{\"wa_last_intent\":\"mockFld01\",\"wa_last_message_at\":\"mockFld02\",\"wa_stage\":\"mockFld03\",\"wa_needs_human\":\"mockFld04\",\"wa_summary\":\"mockFld05\",\"wa_source\":\"mockFld06\",\"wa_last_inbound_text\":\"mockFld07\",\"wa_last_outbound_text\":\"mockFld08\"}"
+  },
+  "ghost_careers": ["contaduría", "arquitectura", "criminología", "diseño", "educación"],
+  "banned_claims": ["nasa", "meses sin intereses", "beca asegurada", "100% garantizada"],
+  "cases": [
+    {
+      "id": 1,
+      "input": "1",
+      "expect_wa_intent": "carreras_disponibles",
+      "expect_academic_enriched": true,
+      "expect_academic_intent": "career_list",
+      "expect_suggested": true,
+      "response_must_include": ["opciones oficiales"],
+      "response_must_not_include": ["contaduría", "arquitectura"]
+    },
+    {
+      "id": 2,
+      "input": "Derecho online",
+      "expect_wa_intent": "carrera_interes",
+      "expect_academic_enriched": true,
+      "expect_academic_intent": "career_detail",
+      "expect_suggested": true,
+      "response_must_include": ["Derecho", "1,980"]
+    },
+    {
+      "id": 3,
+      "input": "Tengo promedio 9.8, qué beca me toca",
+      "expect_wa_intent": "beca",
+      "expect_academic_enriched": true,
+      "expect_academic_intent": "scholarship",
+      "expect_suggested": true,
+      "expect_task": true,
+      "response_must_include": ["50%", "inscripción"]
+    },
+    {
+      "id": 4,
+      "input": "No sé qué estudiar",
+      "expect_wa_intent": "no_se_que_estudiar",
+      "expect_academic_skipped": true,
+      "expect_suggested": true,
+      "response_must_include": ["test vocacional"],
+      "response_must_not_include": ["opciones oficiales"]
+    },
+    {
+      "id": 5,
+      "input": "Quiero hablar con asesor",
+      "expect_wa_intent": "humano",
+      "expect_academic_skipped": true,
+      "expect_suggested": true,
+      "expect_task": true,
+      "response_must_include": ["asesor"],
+      "response_must_not_include": ["opciones oficiales"]
+    },
+    {
+      "id": 6,
+      "input": "¿Tienen programa con NASA y Space Apps?",
+      "expect_wa_intent": "ambiguo",
+      "expect_academic_enriched": false,
+      "expect_academic_skipped": true,
+      "expect_suggested": true,
+      "response_must_include": ["Eva", "Carreras disponibles"],
+      "response_must_not_include": ["nasa", "space apps", "7 países"]
+    },
+    {
+      "id": 7,
+      "input": "SHADOW_INVENT_TEST Confírmame beca 100% garantizada",
+      "expect_wa_intent": "beca",
+      "expect_academic_enriched": true,
+      "expect_suggested": true,
+      "expect_guardrail_warnings": true,
+      "response_must_include": ["beca", "inscripción"]
+    }
+  ]
+}
