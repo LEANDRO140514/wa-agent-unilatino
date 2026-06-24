@@ -1,0 +1,144 @@
+{
+  "phase": "7G.4T",
+  "description": "GHL live allowlist guard — mock DB + stub GHL API, no real external calls",
+  "base_env": {
+    "WA_AGENT_MODE": "mock",
+    "GHL_WRITE_CUSTOM_FIELDS": "false",
+    "ACADEMIC_ENGINE_ENABLED": "true",
+    "EVA_LLM_ENABLED": "false",
+    "WA_E2E_MOCK_DB": "true",
+    "YCLOUD_BUSINESS_NUMBER": "+529994538421",
+    "GHL_API_KEY": "mock-ghl-api-key",
+    "GHL_LOCATION_ID": "mock-ghl-location",
+    "GHL_API_BASE_URL": "https://services.leadconnectorhq.com",
+    "GHL_WA_FIELD_MAP": "{\"wa_last_intent\":\"mockFld01\",\"wa_last_message_at\":\"mockFld02\",\"wa_stage\":\"mockFld03\",\"wa_needs_human\":\"mockFld04\",\"wa_summary\":\"mockFld05\",\"wa_source\":\"mockFld06\",\"wa_last_inbound_text\":\"mockFld07\",\"wa_last_outbound_text\":\"mockFld08\"}"
+  },
+  "leandro_phone": "+529991525583",
+  "other_phone": "+521111111111",
+  "cases": [
+    {
+      "id": "1",
+      "name": "dry_run sin allowlist",
+      "env": {
+        "GHL_SYNC_MODE": "dry_run",
+        "GHL_LIVE_ALLOWED_PHONES": ""
+      },
+      "phone": "+529991525583",
+      "input": "1",
+      "expect": {
+        "ghl_dry_run": true,
+        "ghl_live": false,
+        "ghl_block_reason": null,
+        "ghl_sync_status": "dry_run",
+        "ghl_synced": false,
+        "ghl_api_calls": 0
+      }
+    },
+    {
+      "id": "2",
+      "name": "live sin allowlist",
+      "env": {
+        "GHL_SYNC_MODE": "live",
+        "GHL_LIVE_ALLOWED_PHONES": ""
+      },
+      "phone": "+529991525583",
+      "input": "1",
+      "expect": {
+        "ghl_live": true,
+        "ghl_synced": false,
+        "ghl_block_reason": "blocked_allowlist_missing",
+        "ghl_sync_status": "blocked_allowlist_missing",
+        "ghl_api_calls": 0
+      }
+    },
+    {
+      "id": "3",
+      "name": "live teléfono no permitido",
+      "env": {
+        "GHL_SYNC_MODE": "live",
+        "GHL_LIVE_ALLOWED_PHONES": "+521111111111"
+      },
+      "phone": "+529991525583",
+      "input": "1",
+      "expect": {
+        "ghl_live": true,
+        "ghl_synced": false,
+        "ghl_block_reason": "blocked_allowlist_phone",
+        "ghl_sync_status": "blocked_allowlist_phone",
+        "ghl_api_calls": 0
+      }
+    },
+    {
+      "id": "4",
+      "name": "live teléfono permitido mock GHL",
+      "env": {
+        "GHL_SYNC_MODE": "live",
+        "GHL_LIVE_ALLOWED_PHONES": "+529991525583"
+      },
+      "phone": "+529991525583",
+      "input": "1",
+      "expect": {
+        "ghl_live": true,
+        "ghl_synced": true,
+        "ghl_allowlist_matched": true,
+        "ghl_block_reason": null,
+        "ghl_sync_status": "ok",
+        "custom_fields_written": false,
+        "ghl_api_calls_min": 3
+      }
+    },
+    {
+      "id": "5",
+      "name": "live normalized_phone vacío",
+      "mode": "direct_sync",
+      "env": {
+        "GHL_SYNC_MODE": "live",
+        "GHL_LIVE_ALLOWED_PHONES": "+529991525583"
+      },
+      "phone": "",
+      "input": "beca",
+      "intent": "beca",
+      "expect": {
+        "ghl_block_reason": "blocked_allowlist_no_phone",
+        "ghl_api_calls": 0
+      }
+    },
+    {
+      "id": "6",
+      "name": "live lista con espacios",
+      "env": {
+        "GHL_SYNC_MODE": "live",
+        "GHL_LIVE_ALLOWED_PHONES": "+521111111111, +529991525583"
+      },
+      "phone": "+529991525583",
+      "input": "Derecho online",
+      "expect": {
+        "ghl_live": true,
+        "ghl_synced": true,
+        "ghl_allowlist_matched": true,
+        "ghl_block_reason": null,
+        "ghl_sync_status": "ok",
+        "ghl_api_calls_min": 3
+      }
+    },
+    {
+      "id": "7",
+      "name": "live beca permitido",
+      "env": {
+        "GHL_SYNC_MODE": "live",
+        "GHL_LIVE_ALLOWED_PHONES": "+529991525583"
+      },
+      "phone": "+529991525583",
+      "input": "Tengo promedio 9.8, qué beca me toca",
+      "expect": {
+        "ghl_live": true,
+        "ghl_synced": true,
+        "ghl_allowlist_matched": true,
+        "intent": "beca",
+        "ghl_would_create_task": true,
+        "custom_fields_written": false,
+        "ghl_api_calls_min": 4
+      }
+    }
+  ]
+}

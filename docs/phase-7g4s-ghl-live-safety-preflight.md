@@ -3,7 +3,8 @@
 **Estado:** ✅ **DIAGNÓSTICO COMPLETO** — sin cambios en producción  
 **Fecha:** 2026-06-24  
 **Checkpoint base:** `c9ff7bef5d6e8900a8bee920cee7f773ea46c3e4` (7G.4R)  
-**Próxima fase:** 7G.5A — **no iniciar** sin autorización explícita de Leandro
+**Estado:** ✅ **IMPLEMENTADO** — allowlist en código; 7G.5A pendiente autorización  
+**Próxima fase:** 7G.5A — activar `GHL_SYNC_MODE=live` solo con `GHL_LIVE_ALLOWED_PHONES` configurado
 
 ---
 

@@ -81,6 +81,9 @@ function getConfig() {
       Deno.env.get("GHL_API_BASE_URL") || "https://services.leadconnectorhq.com",
     ghlWaFieldMapRaw: Deno.env.get("GHL_WA_FIELD_MAP") || "",
     ghlWriteCustomFields: Deno.env.get("GHL_WRITE_CUSTOM_FIELDS") === "true",
+    ghlLiveAllowedPhones: parseGhlLiveAllowedPhones(
+      Deno.env.get("GHL_LIVE_ALLOWED_PHONES") || ""
+    ),
     academicEngineEnabled: Deno.env.get("ACADEMIC_ENGINE_ENABLED") === "true",
     evaLlmEnabled: Deno.env.get("EVA_LLM_ENABLED") === "true",
     evaLlmMode: Deno.env.get("LLM_MODE") || "off",
@@ -91,6 +94,86 @@ function getConfig() {
     evaLlmFailOpen: Deno.env.get("EVA_LLM_FAIL_OPEN") !== "false",
     openaiApiKey: Deno.env.get("OPENAI_API_KEY") || "",
   };
+}
+
+function parseGhlLiveAllowedPhones(raw) {
+  if (!raw || !String(raw).trim()) return [];
+  return String(raw)
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function resolveGhlLiveAllowlist(config, normalizedPhone) {
+  const allowedPhones = config.ghlLiveAllowedPhones || [];
+  const count = allowedPhones.length;
+
+  if (config.ghlSyncMode !== "live") {
+    return {
+      applies: false,
+      allowlist_enabled: false,
+      allowlist_matched: null,
+      block_reason: null,
+      allowed: true,
+      allowed_phones_count: count,
+    };
+  }
+
+  const phone = normalizedPhone ? String(normalizedPhone).trim() : "";
+
+  if (count === 0) {
+    return {
+      applies: true,
+      allowlist_enabled: true,
+      allowlist_matched: false,
+      block_reason: "blocked_allowlist_missing",
+      allowed: false,
+      allowed_phones_count: 0,
+    };
+  }
+
+  if (!phone) {
+    return {
+      applies: true,
+      allowlist_enabled: true,
+      allowlist_matched: false,
+      block_reason: "blocked_allowlist_no_phone",
+      allowed: false,
+      allowed_phones_count: count,
+    };
+  }
+
+  const matched = allowedPhones.includes(phone);
+  return {
+    applies: true,
+    allowlist_enabled: true,
+    allowlist_matched: matched,
+    block_reason: matched ? null : "blocked_allowlist_phone",
+    allowed: matched,
+    allowed_phones_count: count,
+  };
+}
+
+function buildGhlAllowlistPayloadMeta(allowlist) {
+  return {
+    allowlist_enabled: allowlist.allowlist_enabled,
+    allowlist_matched: allowlist.allowlist_matched,
+    block_reason: allowlist.block_reason,
+    allowed_phones_count: allowlist.allowed_phones_count,
+  };
+}
+
+async function insertGhlAllowlistBlockedLog(client, baseLog, allowlist) {
+  return insertGHLSyncLog(client, {
+    ...baseLog,
+    action: "blocked_allowlist",
+    status: allowlist.block_reason,
+    error_message: null,
+    payload: buildGhlAllowlistPayloadMeta(allowlist),
+    would_create_contact: false,
+    would_update_contact: false,
+    would_create_task: false,
+  });
 }
 
 function buildYCloudTextPayload(from, to, text) {
@@ -891,6 +974,7 @@ async function syncGHLContactDryRun(client, config, context) {
     existingContact?.ghl_contact_id || null,
     customFieldsArray
   );
+  const allowlist = resolveGhlLiveAllowlist(config, context.normalizedPhone);
 
   const { data: rows, error } = await client.database
     .from("wa_ghl_sync_log")
@@ -916,6 +1000,7 @@ async function syncGHLContactDryRun(client, config, context) {
         custom_fields_ghl_api_shape_preview: dryRun.custom_fields_ghl_api_shape_preview,
         operational: dryRun.operational,
         task_title: dryRun.task_title,
+        ...buildGhlAllowlistPayloadMeta(allowlist),
       },
       protected_fields: {
         ...dryRun.protected_fields,
@@ -942,6 +1027,7 @@ async function syncGHLContactDryRun(client, config, context) {
     ghl_sync_log_id: rows?.[0]?.id || null,
     custom_fields_written: false,
     custom_fields_skipped_reason: writeDecision.skippedReason,
+    ...buildGhlAllowlistPayloadMeta(allowlist),
     ...dryRun,
   };
 }
@@ -1147,6 +1233,23 @@ async function syncGHLContactLive(client, config, context) {
     would_create_task: shouldCreateTaskLive(context.intent),
   };
 
+  const allowlist = resolveGhlLiveAllowlist(config, context.normalizedPhone);
+  if (!allowlist.allowed) {
+    const logId = await insertGhlAllowlistBlockedLog(client, baseLog, allowlist);
+    return {
+      synced: false,
+      live: true,
+      dry_run: false,
+      failed: false,
+      blocked: true,
+      ghl_sync_log_id: logId,
+      block_reason: allowlist.block_reason,
+      ...buildGhlAllowlistPayloadMeta(allowlist),
+      custom_fields_written: false,
+      custom_fields_skipped_reason: "ghl_write_custom_fields_disabled",
+    };
+  }
+
   if (!config.ghlApiKey || !config.ghlLocationId) {
     const errorMessage = "GHL_API_KEY and GHL_LOCATION_ID required for live sync";
     const logId = await insertGHLSyncLog(client, {
@@ -1286,6 +1389,7 @@ async function syncGHLContactLive(client, config, context) {
           customFieldsState.fieldMap,
           waValues
         ),
+        ...buildGhlAllowlistPayloadMeta(allowlist),
       }),
       would_create_contact: action === "create_contact",
       would_update_contact: action === "update_contact",
@@ -1318,6 +1422,7 @@ async function syncGHLContactLive(client, config, context) {
         customFieldsState.fieldMap,
         waValues
       ),
+      ...buildGhlAllowlistPayloadMeta(allowlist),
     };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
@@ -2250,7 +2355,19 @@ module.exports = async function handler(request) {
       ghl_dry_run: ghlSync?.dry_run === true,
       ghl_live: ghlSync?.live === true,
       ghl_synced: ghlSync?.synced === true,
-      ghl_sync_status: ghlSync?.failed ? "failed" : ghlSync?.synced ? "ok" : ghlSync?.dry_run ? "dry_run" : null,
+      ghl_sync_status: ghlSync?.blocked
+        ? ghlSync.block_reason
+        : ghlSync?.failed
+          ? "failed"
+          : ghlSync?.synced
+            ? "ok"
+            : ghlSync?.dry_run
+              ? "dry_run"
+              : null,
+      ghl_allowlist_enabled: ghlSync?.allowlist_enabled ?? null,
+      ghl_allowlist_matched: ghlSync?.allowlist_matched ?? null,
+      ghl_block_reason: ghlSync?.block_reason || null,
+      ghl_allowed_phones_count: ghlSync?.allowed_phones_count ?? null,
       ghl_contact_id: ghlSync?.ghl_contact_id || null,
       ghl_sync_log_id: ghlSync?.ghl_sync_log_id || null,
       ghl_note_created: ghlSync?.note_created === true,
@@ -2303,3 +2420,6 @@ handler.classifyIntent = classifyIntent;
 handler.applyAcademicAndLlmEnrichment = applyAcademicAndLlmEnrichment;
 handler.logLlmShadowEntry = logLlmShadowEntry;
 handler.getConfig = getConfig;
+handler.parseGhlLiveAllowedPhones = parseGhlLiveAllowedPhones;
+handler.resolveGhlLiveAllowlist = resolveGhlLiveAllowlist;
+handler.syncGHLContact = syncGHLContact;
