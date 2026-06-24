@@ -1,6 +1,6 @@
 # Phase 7G.6B — Piloto interno ampliado (3 teléfonos)
 
-**Estado:** ✅ **COMPLETADO** — 3 testers, flujo E2E validado; rollback pendiente confirmación final  
+**Estado:** ✅ **COMPLETADO** — 3 testers, flujo E2E validado; rollback confirmado  
 **Fecha:** 2026-06-24  
 **Ventana piloto:** ~22:34–22:41 UTC  
 **Checkpoint base:** `5e6b268` (7G.6A)
@@ -60,16 +60,20 @@
 
 Activación: `GHL_SYNC_MODE=live` → `GHL_WRITE_CUSTOM_FIELDS=true` → `WA_AGENT_MODE=live_outbound`.
 
-### Después (rollback — confirmar en Dashboard)
+### Después (rollback confirmado 2026-06-24)
 
-| Flag | Valor esperado |
-|------|----------------|
-| `WA_AGENT_MODE` | **`mock`** |
-| `GHL_WRITE_CUSTOM_FIELDS` | **`false`** |
-| `GHL_SYNC_MODE` | **`dry_run`** |
-| Allowlist recomendada | `+529991525583` solo |
+| Flag | Valor |
+|------|-------|
+| `WA_AGENT_MODE` | **`mock`** ✅ |
+| `GHL_WRITE_CUSTOM_FIELDS` | **`false`** ✅ |
+| `GHL_SYNC_MODE` | **`dry_run`** ✅ |
+| `ghl_live` | `false` ✅ |
+| `outbound_real` | `false` ✅ |
+| Allowlist | count=3 (opcional reducir a solo Leandro) |
 
-Orden rollback: WA mock → CF false → GHL dry_run.
+Orden rollback aplicado: WA mock → CF false → GHL dry_run.
+
+**Smoke post-rollback:** 7G.3A **14/14 PASS** · 7G.5B preflight **9/9 PASS**
 
 ---
 
@@ -164,21 +168,16 @@ Orden rollback: WA mock → CF false → GHL dry_run.
 
 ## Rollback y smoke post-piloto
 
-**Acción requerida en InsForge Dashboard:**
+✅ **Rollback confirmado** — flags seguros verificados en runtime.
 
-1. `WA_AGENT_MODE=mock`
-2. `GHL_WRITE_CUSTOM_FIELDS=false`
-3. `GHL_SYNC_MODE=dry_run`
-4. (Opcional) allowlist → solo `+529991525583`
+Smoke post-rollback ejecutado:
 
-**Smoke post-rollback:**
+| Suite | Resultado |
+|-------|-----------|
+| `run-phase7g3a-classifier-hotfix.mjs` | **14/14 PASS** |
+| `run-phase7g5b-custom-fields-preflight.mjs` | **9/9 PASS** |
 
-```bash
-node tests/run-phase7g3a-classifier-hotfix.mjs
-node tests/run-phase7g5b-custom-fields-preflight.mjs
-```
-
-Esperado: 14/14 + 9/9 PASS, `outbound_real=false`, `ghl_live=false`.
+**Opcional:** reducir `GHL_LIVE_ALLOWED_PHONES` a solo `+529991525583` hasta próximo piloto.
 
 ---
 
