@@ -52,8 +52,35 @@ const EVA_INTENT_OPERATIONAL = {
   carreras_disponibles: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
   no_se_que_estudiar: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
   ambiguo: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
+  agradecimiento: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
+  despedida: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
   sin_texto: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
 };
+
+const EVA_PRESERVE_HUMAN_STAGES = new Set([
+  "asesor_requerido",
+  "beca_interes",
+  "soporte_test",
+  "post_test",
+]);
+
+const EVA_AGRADECIMIENTO_POST_ESCALACION =
+  "¡Con gusto! 😊 Tu solicitud ya quedó registrada. Un asesor de admisiones te dará seguimiento en breve.\n\n¡Éxito en tu proceso de inscripción!";
+
+const EVA_AGRADECIMIENTO_GENERICO =
+  "¡Con gusto! 😊 Si necesitas más información sobre carreras, becas o inscripción, escríbenos cuando quieras.";
+
+const EVA_DESPEDIDA_POST_ESCALACION =
+  "¡Hasta pronto! 😊 Tu solicitud sigue en seguimiento con admisiones. ¡Éxito en tu proceso!";
+
+const EVA_DESPEDIDA_GENERICO =
+  "¡Hasta pronto! 😊 Gracias por escribirnos. Si más adelante tienes dudas sobre carreras, becas o inscripción, aquí estaré para ayudarte.";
+
+function shouldPreserveHumanContext(contactContext = {}) {
+  if (contactContext.wa_needs_human === true) return true;
+  const stage = contactContext.wa_stage || "";
+  return EVA_PRESERVE_HUMAN_STAGES.has(stage);
+}
 
 const NON_INBOUND_EVENT_TYPES = new Set([
   "whatsapp.message.updated",
@@ -740,6 +767,8 @@ const INTENT_TAG_MAP = {
   duda_test: "wa_duda_test",
   post_test: "wa_post_test",
   sin_texto: "wa_sin_texto",
+  agradecimiento: "wa_interes_info",
+  despedida: "wa_interes_info",
 };
 
 const EVA_MENU_OPTION_GROUPS = [
@@ -1453,8 +1482,30 @@ async function syncGHLContact(client, config, context) {
   return syncGHLContactDryRun(client, config, context);
 }
 
-function buildIntentDecision(intent, config) {
+function buildIntentDecision(intent, config, contactContext = {}) {
   const testUrl = config.evaTestUrl;
+  const preserveHuman = shouldPreserveHumanContext(contactContext);
+
+  if (intent === "agradecimiento") {
+    return enrichDecisionWithOperational({
+      intent,
+      responseText: preserveHuman ? EVA_AGRADECIMIENTO_POST_ESCALACION : EVA_AGRADECIMIENTO_GENERICO,
+      waStage: preserveHuman ? contactContext.wa_stage || "asesor_requerido" : "cierre_positivo",
+      needsHuman: preserveHuman,
+      createTask: false,
+    });
+  }
+
+  if (intent === "despedida") {
+    return enrichDecisionWithOperational({
+      intent,
+      responseText: preserveHuman ? EVA_DESPEDIDA_POST_ESCALACION : EVA_DESPEDIDA_GENERICO,
+      waStage: preserveHuman ? contactContext.wa_stage || "asesor_requerido" : "despedida",
+      needsHuman: preserveHuman,
+      createTask: false,
+    });
+  }
+
   const matrix = {
     sin_texto: {
       responseText: NO_TEXT_RESPONSE,
@@ -1630,6 +1681,8 @@ function matchesHumano(text, hasAny) {
     "quiero una llamada",
     "llameme",
     "llámame",
+    "para hablar con un asesor",
+    "para hablar con asesor",
   ]);
 }
 
@@ -1647,6 +1700,45 @@ function matchesBeca(text, hasAny) {
     "hay descuentos",
     "tienen apoyo economico",
     "tienen apoyo económico",
+  ]);
+}
+
+function matchesAgradecimiento(text, hasAny) {
+  if (
+    !hasAny([
+      "gracias",
+      "muchas gracias",
+      "mil gracias",
+      "te agradezco",
+      "les agradezco",
+      "agradecido",
+      "agradecida",
+      "gracias por la info",
+      "gracias por la informacion",
+      "gracias por la información",
+    ])
+  ) {
+    return false;
+  }
+  if (hasAny(["quiero", "necesito", "cuanto", "cuánto", "beca", "carrera", "inscripcion", "inscripción"])) {
+    return text.length <= 35;
+  }
+  return true;
+}
+
+function matchesDespedida(text, hasAny) {
+  const normalized = normalizeMenuInput(text);
+  if (normalized === "bye" || normalized === "by" || normalized === "x") return true;
+  return hasAny([
+    "adios",
+    "adiós",
+    "chao",
+    "hasta luego",
+    "hasta pronto",
+    "nos vemos",
+    "me voy",
+    "bye bye",
+    "goodbye",
   ]);
 }
 
@@ -1721,8 +1813,8 @@ function detectMenuOption(rawText) {
   return { detected: false, menu_option_value: null, intent: null };
 }
 
-function returnIntent(intent, config, menuMeta = null) {
-  const decision = buildIntentDecision(intent, config);
+function returnIntent(intent, config, menuMeta = null, contactContext = {}) {
+  const decision = buildIntentDecision(intent, config, contactContext);
   if (menuMeta?.detected) {
     return {
       ...decision,
@@ -1737,48 +1829,56 @@ function returnIntent(intent, config, menuMeta = null) {
   };
 }
 
-function classifyIntent(rawText, config) {
+function classifyIntent(rawText, config, contactContext = {}) {
   if (!rawText || !String(rawText).trim()) {
-    return returnIntent("sin_texto", config);
+    return returnIntent("sin_texto", config, null, contactContext);
   }
 
   const text = cleanText(rawText);
   const hasAny = (arr) => arr.some((t) => text.includes(cleanText(t)));
 
   if (matchesDudaTest(text, hasAny)) {
-    return returnIntent("duda_test", config);
+    return returnIntent("duda_test", config, null, contactContext);
   }
 
   if (matchesPostTest(text, hasAny)) {
-    return returnIntent("post_test", config);
+    return returnIntent("post_test", config, null, contactContext);
   }
 
   if (matchesHumano(text, hasAny)) {
-    return returnIntent("humano", config);
+    return returnIntent("humano", config, null, contactContext);
   }
 
   if (matchesBeca(text, hasAny)) {
-    return returnIntent("beca", config);
+    return returnIntent("beca", config, null, contactContext);
   }
 
   if (matchesNoSeQueEstudiar(text, hasAny)) {
-    return returnIntent("no_se_que_estudiar", config);
+    return returnIntent("no_se_que_estudiar", config, null, contactContext);
   }
 
   if (matchesCarrerasDisponibles(text, hasAny)) {
-    return returnIntent("carreras_disponibles", config);
+    return returnIntent("carreras_disponibles", config, null, contactContext);
   }
 
   if (matchesCarreraInteres(text, hasAny)) {
-    return returnIntent("carrera_interes", config);
+    return returnIntent("carrera_interes", config, null, contactContext);
   }
 
   const menu = detectMenuOption(rawText);
   if (menu.detected) {
-    return returnIntent(menu.intent, config, menu);
+    return returnIntent(menu.intent, config, menu, contactContext);
   }
 
-  return returnIntent("ambiguo", config);
+  if (matchesAgradecimiento(text, hasAny)) {
+    return returnIntent("agradecimiento", config, null, contactContext);
+  }
+
+  if (matchesDespedida(text, hasAny)) {
+    return returnIntent("despedida", config, null, contactContext);
+  }
+
+  return returnIntent("ambiguo", config, null, contactContext);
 }
 
 let _academicEngineModules = null;
@@ -2154,7 +2254,20 @@ module.exports = async function handler(request) {
     throwIfError(inboundError, "Insert wa_inbound_messages");
     inboundId = inboundRows?.[0]?.id || null;
 
-    const decision = classifyIntent(parsed.message_text, config);
+    let contactContext = {};
+    if (normalizedPhone) {
+      const { data: prevContact, error: prevContactError } = await client.database
+        .from("wa_contacts_state")
+        .select("wa_stage, wa_last_intent, wa_needs_human")
+        .eq("normalized_phone", normalizedPhone)
+        .maybeSingle();
+      throwIfError(prevContactError, "Lookup wa_contacts_state for context");
+      if (prevContact) {
+        contactContext = prevContact;
+      }
+    }
+
+    const decision = classifyIntent(parsed.message_text, config, contactContext);
     const enrichResult = await applyAcademicAndLlmEnrichment(
       decision,
       parsed.message_text,

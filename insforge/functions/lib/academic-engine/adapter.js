@@ -16,6 +16,8 @@ const BLOCKED_WA_INTENTS = new Set([
   "post_test",
   "duda_test",
   "no_se_que_estudiar",
+  "agradecimiento",
+  "despedida",
 ]);
 
 /**

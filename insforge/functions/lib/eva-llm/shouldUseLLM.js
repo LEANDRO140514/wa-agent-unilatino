@@ -49,6 +49,8 @@ export function shouldUseLLM(decision, _academicMeta, config = {}) {
     "post_test",
     "duda_test",
     "no_se_que_estudiar",
+    "agradecimiento",
+    "despedida",
   ]);
   if (blockedIntents.has(intent)) return false;
 
