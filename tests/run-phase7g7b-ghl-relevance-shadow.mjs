@@ -23,7 +23,7 @@ const { evaluateGhlRelevance, normalizeGhlRelevanceConfig } = gate;
 const config = handler.getConfig();
 const relevanceConfig = handler.buildGhlRelevanceConfigFromHandlerConfig(config);
 
-function shadow(input, extra = {}) {
+function gateEval(input, extra = {}) {
   const intentDecision =
     extra.intentDecision ||
     handler.classifyIntent(input.messageText, config, input.contactContext || {});
@@ -32,9 +32,14 @@ function shadow(input, extra = {}) {
     intent: extra.intent ?? intentDecision.intent,
     intentDecision,
     firstMessage: input.firstMessage,
+    academicResult: input.academicResult,
     config: relevanceConfig,
     env: {},
   });
+}
+
+function shadow(input, extra = {}) {
+  return gateEval(input, extra);
 }
 
 function assertCase(id, result, expect) {
@@ -46,6 +51,18 @@ function assertCase(id, result, expect) {
     }
     if (key === "human_handoff_present") {
       if (!result.human_handoff_reason) issues.push("human_handoff_reason missing");
+      continue;
+    }
+    if (key === "human_handoff_absent") {
+      if (value && result.human_handoff_reason) {
+        issues.push(`human_handoff_reason=${result.human_handoff_reason}`);
+      }
+      continue;
+    }
+    if (key === "routing_reason_not") {
+      if (result.routing_reason === value) {
+        issues.push(`routing_reason=${result.routing_reason} should not equal ${value}`);
+      }
       continue;
     }
     if (result[key] !== value) issues.push(`${key}=${JSON.stringify(result[key])} expected ${JSON.stringify(value)}`);
@@ -325,6 +342,94 @@ const cases = [
       human_handoff_present: true,
       routing_reason: "cost_signal_requires_human_validation",
       lead_score_min: 45,
+    },
+  },
+  {
+    id: "Q-meta-greeting-academic",
+    run: () =>
+      gateEval({
+        messageText: "Hola",
+        contactContext: {},
+        messageType: "text",
+        source: "meta_ads",
+        firstMessage: true,
+        academicResult: {
+          academic_intent: "greeting",
+          academic_enriched: true,
+          academic_confidence: 1,
+        },
+      }),
+    expect: {
+      would_sync_to_ghl: false,
+      ignored_for_ghl: true,
+      would_create_task: false,
+      routing_reason: "meta_ads_first_message_no_sync",
+    },
+  },
+  {
+    id: "R-costo-career-detail-confidence",
+    run: () =>
+      gateEval({
+        messageText: "Cuánto cuesta Derecho en línea?",
+        contactContext: {},
+        messageType: "text",
+        source: "organic",
+        academicResult: {
+          academic_intent: "career_detail",
+          academic_enriched: true,
+          academic_confidence: 1,
+        },
+      }),
+    expect: {
+      would_sync_to_ghl: true,
+      would_create_task: true,
+      human_handoff_present: true,
+      routing_reason: "cost_signal_requires_human_validation",
+    },
+  },
+  {
+    id: "S-costo-validated-explicit",
+    run: () =>
+      gateEval({
+        messageText: "Cuánto cuesta Derecho en línea?",
+        contactContext: {},
+        messageType: "text",
+        source: "organic",
+        academicResult: {
+          academic_intent: "cost",
+          academic_enriched: true,
+          academic_confidence: 1,
+          cost_validated: true,
+          kb_hit: true,
+        },
+      }),
+    expect: {
+      would_sync_to_ghl: true,
+      would_create_contact: true,
+      would_create_note: true,
+      would_create_task: false,
+      human_handoff_absent: true,
+      routing_reason_not: "cost_signal_requires_human_validation",
+    },
+  },
+  {
+    id: "I2-meta-ads-carrera-academic",
+    run: () =>
+      gateEval({
+        messageText: "Quiero información de Psicología",
+        contactContext: { wa_stage: "carrera_interes" },
+        messageType: "text",
+        source: "meta_ads",
+        firstMessage: false,
+        academicResult: {
+          academic_intent: "career_detail",
+          academic_enriched: true,
+          academic_confidence: 1,
+        },
+      }),
+    expect: {
+      would_sync_to_ghl: true,
+      lead_score_min: 30,
     },
   },
   {

@@ -154,6 +154,42 @@ const COST_PHRASES = [
   "pago",
 ];
 
+const NON_COMMERCIAL_ACADEMIC_INTENTS = new Set([
+  "greeting",
+  "saludo",
+  "farewell",
+  "despedida",
+  "thanks",
+  "agradecimiento",
+  "small_talk",
+  "fallback",
+  "ambiguous",
+  "ambiguo",
+  "none",
+]);
+
+const COST_ACADEMIC_INTENTS = new Set([
+  "cost",
+  "tuition",
+  "pricing",
+  "colegiatura",
+  "mensualidad",
+  "costo",
+  "precio",
+]);
+
+const COST_TOPIC_TOKENS = [
+  "cost",
+  "tuition",
+  "pricing",
+  "colegiatura",
+  "mensualidad",
+  "precio",
+  "costo",
+  "tarifa",
+  "pago",
+];
+
 const CAREER_KEYWORDS = [
   "derecho",
   "psicologia",
@@ -381,18 +417,55 @@ export function hasCostSignal(messageText) {
   return false;
 }
 
-function isAcademicKbValidated(academicResult) {
+export function isNonCommercialAcademicIntent(academicIntent) {
+  if (academicIntent === null || academicIntent === undefined) return true;
+  const normalized = normalizeText(String(academicIntent));
+  if (!normalized || normalized === "none") return true;
+  return NON_COMMERCIAL_ACADEMIC_INTENTS.has(normalized);
+}
+
+function hasCostTopicSignal(topicRaw) {
+  const topic = normalizeText(topicRaw || "");
+  if (!topic) return false;
+  return COST_TOPIC_TOKENS.some((token) => topic.includes(normalizeText(token)));
+}
+
+export function isCostOrTuitionExplicitlyValidated(academicResult) {
   if (!academicResult || typeof academicResult !== "object") return false;
-  if (academicResult.kb_hit === true || academicResult.validated === true) return true;
-  if (academicResult.academic_kb_validated === true) return true;
-  const conf = Number(academicResult.academic_confidence);
-  return Number.isFinite(conf) && conf >= 0.85;
+
+  if (academicResult.cost_validated === true) return true;
+  if (academicResult.tuition_validated === true) return true;
+  if (academicResult.pricing_validated === true) return true;
+  if (academicResult.has_cost_info === true) return true;
+  if (academicResult.contains_cost === true) return true;
+
+  const intent = normalizeText(academicResult.academic_intent || "");
+  if (COST_ACADEMIC_INTENTS.has(intent)) {
+    if (
+      academicResult.kb_hit === true ||
+      academicResult.validated === true ||
+      academicResult.academic_kb_validated === true
+    ) {
+      return true;
+    }
+  }
+
+  if (academicResult.kb_hit === true) {
+    const topic =
+      academicResult.kb_topic ||
+      academicResult.topic ||
+      academicResult.academic_topic ||
+      "";
+    if (hasCostTopicSignal(topic)) return true;
+  }
+
+  return false;
 }
 
 export function requiresCostHumanValidation(input = {}) {
   const { messageText, academicResult } = input;
   if (!hasCostSignal(messageText)) return false;
-  if (isAcademicKbValidated(academicResult)) return false;
+  if (isCostOrTuitionExplicitlyValidated(academicResult)) return false;
   const t = normalizeText(messageText);
   return (
     hasCareerMention(messageText) ||
@@ -458,8 +531,11 @@ export function hasBusinessSignal(input = {}) {
   }
   if (hasCareerMention(messageText)) return true;
 
-  if (academicResult?.academic_enriched === true) return true;
-  if (academicResult?.academic_intent && academicResult.academic_intent !== "fallback") {
+  const academicIntent = academicResult?.academic_intent;
+  if (academicResult?.academic_enriched === true && !isNonCommercialAcademicIntent(academicIntent)) {
+    return true;
+  }
+  if (academicIntent && !isNonCommercialAcademicIntent(academicIntent)) {
     return true;
   }
 
