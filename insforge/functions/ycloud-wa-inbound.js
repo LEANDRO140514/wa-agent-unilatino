@@ -910,6 +910,22 @@ function getTaskTitle(intent) {
   return EVA_INTENT_TASK_TITLES[intent] || null;
 }
 
+function resolveGhlTaskTitle(context) {
+  if (context.task_title) return context.task_title;
+  const fromIntent = getTaskTitle(context.intent);
+  if (fromIntent) return fromIntent;
+  if (
+    context.ghlHumanHandoffReason === "cost_or_tuition_requires_validation" ||
+    context.ghlRoutingReason === "cost_signal_requires_human_validation"
+  ) {
+    return "Validar costo/colegiatura — lead WhatsApp";
+  }
+  if (context.ghlWouldCreateTask === true) {
+    return "Atender lead WhatsApp — seguimiento gate";
+  }
+  return null;
+}
+
 function enrichDecisionWithOperational(decision) {
   const op = EVA_INTENT_OPERATIONAL[decision.intent] || EVA_INTENT_OPERATIONAL.ambiguo;
   const taskTitle = decision.createTask ? getTaskTitle(decision.intent) : null;
@@ -1039,7 +1055,7 @@ function buildGHLDryRunPayload(context, existingGhlContactId, customFieldsState)
 
   const taskPayload = shouldCreateTaskDryRun(context)
     ? {
-        title: context.task_title || getTaskTitle(context.intent),
+        title: resolveGhlTaskTitle(context),
         body: buildGHLTaskDescription(context),
         dueDate: context.timestamp,
         priority: context.priority,
@@ -1493,7 +1509,7 @@ async function syncGHLContactLive(client, config, context) {
     let taskRaw = null;
     if (shouldCreateTaskLive(context)) {
       taskRaw = await createGHLTask(config, contactId, {
-        title: context.task_title || getTaskTitle(context.intent),
+        title: resolveGhlTaskTitle(context),
         body: buildGHLLiveTaskDescription(context),
         dueDate: context.timestamp,
       });
@@ -2792,3 +2808,4 @@ handler.insertGhlPolicyBlockedResult = insertGhlPolicyBlockedResult;
 handler.buildGHLDryRunPayload = buildGHLDryRunPayload;
 handler.shouldCreateTaskDryRun = shouldCreateTaskDryRun;
 handler.shouldCreateTaskLive = shouldCreateTaskLive;
+handler.resolveGhlTaskTitle = resolveGhlTaskTitle;
