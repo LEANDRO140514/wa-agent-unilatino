@@ -141,6 +141,19 @@ const MODALITY_PHRASES = [
   "semipresencial",
 ];
 
+const COST_PHRASES = [
+  "costo",
+  "cuesta",
+  "precio",
+  "colegiatura",
+  "mensualidad",
+  "cuanto se paga",
+  "cuánto se paga",
+  "inscripcion cuanto",
+  "inscripción cuánto",
+  "pago",
+];
+
 const CAREER_KEYWORDS = [
   "derecho",
   "psicologia",
@@ -357,6 +370,65 @@ export function hasDocumentsEnrollmentSignal(messageText) {
 
 export function hasParentGuardianSignal(messageText) {
   return textIncludesAny(messageText, PARENT_PHRASES);
+}
+
+export function hasCostSignal(messageText) {
+  const t = normalizeText(messageText);
+  if (textIncludesAny(messageText, COST_PHRASES)) return true;
+  if (t.includes("cuanto") && (t.includes("cuesta") || t.includes("pago") || t.includes("cobran"))) {
+    return true;
+  }
+  return false;
+}
+
+function isAcademicKbValidated(academicResult) {
+  if (!academicResult || typeof academicResult !== "object") return false;
+  if (academicResult.kb_hit === true || academicResult.validated === true) return true;
+  if (academicResult.academic_kb_validated === true) return true;
+  const conf = Number(academicResult.academic_confidence);
+  return Number.isFinite(conf) && conf >= 0.85;
+}
+
+export function requiresCostHumanValidation(input = {}) {
+  const { messageText, academicResult } = input;
+  if (!hasCostSignal(messageText)) return false;
+  if (isAcademicKbValidated(academicResult)) return false;
+  const t = normalizeText(messageText);
+  return (
+    hasCareerMention(messageText) ||
+    textIncludesAny(messageText, MODALITY_PHRASES) ||
+    hasExplicitEnrollmentSignal(messageText) ||
+    t.includes("admision") ||
+    t.includes("admisión")
+  );
+}
+
+function isMetaAdsNonCommercialFirstMessage(input, effectiveIntent) {
+  const { messageText, source } = input;
+  if (normalizeTrafficSource(source) !== "meta_ads") return false;
+  if (!resolveFirstMessage(input)) return false;
+  if (hasBusinessSignal(input)) return false;
+  return (
+    effectiveIntent === "saludo" ||
+    effectiveIntent === "ambiguo" ||
+    isSaludoOnly(messageText)
+  );
+}
+
+function applyMetaAdsFirstMessageNoSync(base) {
+  return {
+    ...base,
+    qualified_for_ghl: false,
+    would_sync_to_ghl: false,
+    would_create_contact: false,
+    would_create_note: false,
+    would_create_task: false,
+    would_update_custom_fields: false,
+    ignored_for_ghl: true,
+    routing_reason: "meta_ads_first_message_no_sync",
+    routing_decision: "whatsapp_and_insforge_only",
+    human_handoff_reason: null,
+  };
 }
 
 export function hasBusinessSignal(input = {}) {
@@ -643,7 +715,6 @@ export function evaluateGhlRelevance(input = {}) {
   const intent = input.intent;
   const effectiveIntent = resolveEffectiveIntent(input);
   const { contactContext, messageText, source, intentDecision } = input;
-  const firstMessage = resolveFirstMessage(input);
   const threshold =
     source === "meta_ads" ? config.ghlMetaAdsLeadScoreThreshold : config.ghlLeadScoreThreshold;
 
@@ -659,21 +730,8 @@ export function evaluateGhlRelevance(input = {}) {
     };
   }
 
-  if (
-    source === "meta_ads" &&
-    firstMessage &&
-    config.metaAdsFirstMessageNoSync &&
-    (effectiveIntent === "saludo" ||
-      effectiveIntent === "ambiguo" ||
-      isSaludoOnly(messageText)) &&
-    !hasBusinessSignal(input)
-  ) {
-    return {
-      ...base,
-      ignored_for_ghl: true,
-      routing_reason: "meta_ads_first_message_no_sync",
-      routing_decision: "whatsapp_and_insforge_only",
-    };
+  if (isMetaAdsNonCommercialFirstMessage(input, effectiveIntent)) {
+    return applyMetaAdsFirstMessageNoSync(base);
   }
 
   if (effectiveIntent === "sin_texto" || effectiveIntent === "media_no_text") {
@@ -708,6 +766,14 @@ export function evaluateGhlRelevance(input = {}) {
     !textIncludesAny(messageText, ["esta semana", "urgente", "hoy", "ya"])
   ) {
     return applyQualifiedContactNote(base, "documents_enrollment_signal");
+  }
+
+  if (requiresCostHumanValidation(input)) {
+    return applyQualifiedWithTask(
+      base,
+      "cost_or_tuition_requires_validation",
+      "cost_signal_requires_human_validation"
+    );
   }
 
   const humanHandoffReason = getHumanHandoffReason({ ...input, intent: effectiveIntent });
@@ -760,6 +826,10 @@ export function evaluateGhlRelevance(input = {}) {
       ...applyQualifiedContactNote(base, "high_value_intent_exception"),
       routing_decision: "watch_only_or_high_value_exception",
     };
+  }
+
+  if (isMetaAdsNonCommercialFirstMessage(input, effectiveIntent)) {
+    return applyMetaAdsFirstMessageNoSync(base);
   }
 
   if (source === "meta_ads" && config.metaAdsRequireQualification && lead_score < threshold) {

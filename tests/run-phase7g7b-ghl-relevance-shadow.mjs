@@ -183,6 +183,31 @@ const cases = [
       }),
     expect: {
       would_sync_to_ghl: false,
+      ignored_for_ghl: true,
+      would_create_task: false,
+      routing_reason: "meta_ads_first_message_no_sync",
+    },
+  },
+  {
+    id: "H2-meta-ads-primer-saludo-flag-off",
+    run: () =>
+      evaluateGhlRelevance({
+        messageText: "Hola",
+        intent: "ambiguo",
+        intentDecision: { intent: "ambiguo" },
+        contactContext: {},
+        messageType: "text",
+        source: "meta_ads",
+        firstMessage: true,
+        config: {
+          ...relevanceConfig,
+          metaAdsFirstMessageNoSync: false,
+        },
+        env: {},
+      }),
+    expect: {
+      would_sync_to_ghl: false,
+      ignored_for_ghl: true,
       routing_reason: "meta_ads_first_message_no_sync",
     },
   },
@@ -281,6 +306,25 @@ const cases = [
       would_create_contact: true,
       would_create_note: true,
       would_create_task: false,
+    },
+  },
+  {
+    id: "P-costo-carrera",
+    run: () =>
+      shadow({
+        messageText: "Cuánto cuesta Derecho en línea?",
+        contactContext: {},
+        messageType: "text",
+        source: "organic",
+      }),
+    expect: {
+      would_sync_to_ghl: true,
+      would_create_contact: true,
+      would_create_note: true,
+      would_create_task: true,
+      human_handoff_present: true,
+      routing_reason: "cost_signal_requires_human_validation",
+      lead_score_min: 45,
     },
   },
   {

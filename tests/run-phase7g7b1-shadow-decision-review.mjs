@@ -58,6 +58,7 @@ const CASES = [
       const issues = [];
       const review = [];
       if (s?.would_sync_to_ghl !== false) issues.push("would_sync_to_ghl!=false");
+      if (s?.ignored_for_ghl !== true) issues.push("ignored_for_ghl!=true");
       if (s?.would_create_task === true) issues.push("would_create_task=true");
       if (s?.routing_reason !== "meta_ads_first_message_no_sync") {
         issues.push(`routing_reason=${s?.routing_reason}`);
@@ -163,14 +164,18 @@ const CASES = [
     evaluate(body, s) {
       const hard = hardFail(body, s);
       const issues = [];
-      const review = [];
       if (s?.would_sync_to_ghl !== true) issues.push("would_sync_to_ghl!=true");
       if (s?.would_create_contact !== true) issues.push("would_create_contact!=true");
       if (s?.would_create_note !== true) issues.push("would_create_note!=true");
-      if (s?.would_create_task !== true) review.push("would_create_task=false (costo no validado en KB?)");
-      if (!s?.human_handoff_reason) review.push("human_handoff_reason ausente");
-      if ((s?.lead_score ?? 0) < 45) review.push(`lead_score=${s?.lead_score}<45`);
-      return verdictFrom(issues, hard, review);
+      if (s?.would_create_task !== true) issues.push("would_create_task!=true");
+      if (s?.human_handoff_reason !== "cost_or_tuition_requires_validation") {
+        issues.push(`human_handoff_reason=${s?.human_handoff_reason ?? "missing"}`);
+      }
+      if (s?.routing_reason !== "cost_signal_requires_human_validation") {
+        issues.push(`routing_reason=${s?.routing_reason}`);
+      }
+      if ((s?.lead_score ?? 0) < 45) issues.push(`lead_score=${s?.lead_score}<45`);
+      return verdictFrom(issues, hard);
     },
   },
   {
