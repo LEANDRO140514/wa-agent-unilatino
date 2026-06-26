@@ -31,6 +31,7 @@ function shadow(input, extra = {}) {
     ...input,
     intent: extra.intent ?? intentDecision.intent,
     intentDecision,
+    firstMessage: input.firstMessage,
     config: relevanceConfig,
     env: {},
   });
@@ -178,6 +179,7 @@ const cases = [
         contactContext: {},
         messageType: "text",
         source: "meta_ads",
+        firstMessage: true,
       }),
     expect: {
       would_sync_to_ghl: false,
@@ -192,10 +194,93 @@ const cases = [
         contactContext: { wa_stage: "carrera_interes" },
         messageType: "text",
         source: "meta_ads",
+        firstMessage: false,
       }),
     expect: {
       lead_score_min: 30,
       would_sync_to_ghl: true,
+    },
+  },
+  {
+    id: "K-inscripcion-explicita",
+    run: () =>
+      shadow({
+        messageText: "Quiero inscribirme esta semana",
+        contactContext: {},
+        messageType: "text",
+        source: "organic",
+      }),
+    expect: {
+      would_sync_to_ghl: true,
+      would_create_task: true,
+      human_handoff_present: true,
+      lead_score_min: 55,
+    },
+  },
+  {
+    id: "L-test-vocacional",
+    run: () =>
+      shadow({
+        messageText: "Quiero hacer el test vocacional",
+        contactContext: {},
+        messageType: "text",
+        source: "organic",
+      }),
+    expect: {
+      would_sync_to_ghl: true,
+      would_create_contact: true,
+      would_create_note: true,
+      would_create_task: false,
+      routing_reason: "vocational_test_lead",
+    },
+  },
+  {
+    id: "M-orientacion",
+    run: () =>
+      shadow({
+        messageText: "No sé qué estudiar, me pueden orientar?",
+        contactContext: {},
+        messageType: "text",
+        source: "organic",
+      }),
+    expect: {
+      would_sync_to_ghl: true,
+      would_create_contact: true,
+      would_create_note: true,
+      would_create_task: false,
+    },
+  },
+  {
+    id: "N-documentos",
+    run: () =>
+      shadow({
+        messageText: "Qué documentos necesito para inscribirme?",
+        contactContext: {},
+        messageType: "text",
+        source: "organic",
+      }),
+    expect: {
+      would_sync_to_ghl: true,
+      would_create_contact: true,
+      would_create_note: true,
+      would_create_task: false,
+      routing_reason: "documents_enrollment_signal",
+    },
+  },
+  {
+    id: "O-mama-orientacion",
+    run: () =>
+      shadow({
+        messageText: "Soy mamá de un alumno y quiero saber qué carrera le conviene",
+        contactContext: {},
+        messageType: "text",
+        source: "organic",
+      }),
+    expect: {
+      would_sync_to_ghl: true,
+      would_create_contact: true,
+      would_create_note: true,
+      would_create_task: false,
     },
   },
   {

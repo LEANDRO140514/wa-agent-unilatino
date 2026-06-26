@@ -51,7 +51,8 @@ const CASES = [
     from: META_FIRST_FROM,
     message: "Hola",
     source: "meta_ads",
-    comment: "Teléfono aislado para simular firstMessage (sin historial previo).",
+    first_message: true,
+    comment: "Teléfono aislado + first_message=true en payload.",
     evaluate(body, s) {
       const hard = hardFail(body, s);
       const issues = [];
@@ -59,9 +60,9 @@ const CASES = [
       if (s?.would_sync_to_ghl !== false) issues.push("would_sync_to_ghl!=false");
       if (s?.would_create_task === true) issues.push("would_create_task=true");
       if (s?.routing_reason !== "meta_ads_first_message_no_sync") {
-        review.push(`routing_reason=${s?.routing_reason} (esperado meta_ads_first_message_no_sync)`);
+        issues.push(`routing_reason=${s?.routing_reason}`);
       }
-      return verdictFrom(issues, hard, review);
+      return verdictFrom(issues, hard);
     },
   },
   {
@@ -198,14 +199,13 @@ const CASES = [
     evaluate(body, s) {
       const hard = hardFail(body, s);
       const issues = [];
-      const review = [];
       if (s?.would_sync_to_ghl !== true) issues.push("would_sync_to_ghl!=true");
       if (s?.would_create_contact !== true) issues.push("would_create_contact!=true");
       if (s?.would_create_note !== true) issues.push("would_create_note!=true");
-      if (s?.would_create_task !== true) review.push("would_create_task=false (inscripción urgente, ideal task)");
-      if (!s?.human_handoff_reason) review.push("human_handoff_reason ausente");
-      if ((s?.lead_score ?? 0) < 60) review.push(`lead_score=${s?.lead_score}<60 ideal`);
-      return verdictFrom(issues, hard, review);
+      if (s?.would_create_task !== true) issues.push("would_create_task!=true");
+      if (!s?.human_handoff_reason) issues.push("human_handoff_reason missing");
+      if ((s?.lead_score ?? 0) < 55) issues.push(`lead_score=${s?.lead_score}<55`);
+      return verdictFrom(issues, hard);
     },
   },
   {
@@ -215,15 +215,12 @@ const CASES = [
     message: "No sé qué estudiar, me pueden orientar?",
     evaluate(body, s) {
       const hard = hardFail(body, s);
-      const review = [];
-      if (s?.would_create_task === true) review.push("would_create_task=true (orientación, ideal sin task)");
-      if (s?.would_sync_to_ghl === false && (s?.lead_score ?? 0) < 45) {
-        review.push("would_sync=false con score bajo");
-      }
-      if (s?.would_sync_to_ghl === true && s?.would_create_note !== true) {
-        review.push("sync true pero note false");
-      }
-      return verdictFrom([], hard, review);
+      const issues = [];
+      if (s?.would_sync_to_ghl !== true) issues.push("would_sync_to_ghl!=true");
+      if (s?.would_create_contact !== true) issues.push("would_create_contact!=true");
+      if (s?.would_create_note !== true) issues.push("would_create_note!=true");
+      if (s?.would_create_task === true) issues.push("would_create_task=true");
+      return verdictFrom(issues, hard);
     },
   },
   {
@@ -234,17 +231,11 @@ const CASES = [
     evaluate(body, s) {
       const hard = hardFail(body, s);
       const issues = [];
-      const review = [];
-      if (s?.would_sync_to_ghl !== true) review.push("would_sync_to_ghl=false");
-      if (s?.would_create_contact !== true && s?.would_sync_to_ghl) {
-        review.push("would_create_contact=false");
-      }
-      if (s?.would_create_note !== true && s?.would_sync_to_ghl) {
-        review.push("would_create_note=false");
-      }
+      if (s?.would_sync_to_ghl !== true) issues.push("would_sync_to_ghl!=true");
+      if (s?.would_create_contact !== true) issues.push("would_create_contact!=true");
+      if (s?.would_create_note !== true) issues.push("would_create_note!=true");
       if (s?.would_create_task === true) issues.push("would_create_task=true");
-      if ((s?.lead_score ?? 0) < 45) review.push(`lead_score=${s?.lead_score}<45`);
-      return verdictFrom(issues, hard, review);
+      return verdictFrom(issues, hard);
     },
   },
   {
@@ -270,13 +261,12 @@ const CASES = [
     message: "Qué documentos necesito para inscribirme?",
     evaluate(body, s) {
       const hard = hardFail(body, s);
-      const review = [];
-      if (s?.would_sync_to_ghl === false) review.push("would_sync_to_ghl=false");
-      if (s?.would_create_task === true) review.push("would_create_task=true (docs, ideal sin task)");
-      if (s?.would_sync_to_ghl && s?.would_create_note !== true) {
-        review.push("note=false con sync");
-      }
-      return verdictFrom([], hard, review);
+      const issues = [];
+      if (s?.would_sync_to_ghl !== true) issues.push("would_sync_to_ghl!=true");
+      if (s?.would_create_contact !== true) issues.push("would_create_contact!=true");
+      if (s?.would_create_note !== true) issues.push("would_create_note!=true");
+      if (s?.would_create_task === true) issues.push("would_create_task=true");
+      return verdictFrom(issues, hard);
     },
   },
   {
@@ -331,12 +321,13 @@ const CASES = [
     message: "Soy mamá de un alumno y quiero saber qué carrera le conviene",
     evaluate(body, s) {
       const hard = hardFail(body, s);
+      const issues = [];
       const review = [];
-      if (s?.would_create_task === true) review.push("would_create_task=true");
-      if (s?.would_sync_to_ghl === false) review.push("would_sync_to_ghl=false");
+      if (s?.would_sync_to_ghl !== true) issues.push("would_sync_to_ghl!=true");
+      if (s?.would_create_task === true) issues.push("would_create_task=true");
       const hasParent = (s?.score_breakdown || []).some((b) => b.rule === "parent_or_guardian");
       if (!hasParent) review.push("score_breakdown sin parent_or_guardian");
-      return verdictFrom([], hard, review);
+      return verdictFrom(issues, hard, review);
     },
   },
   {
@@ -345,7 +336,8 @@ const CASES = [
     label: "Meta Ads con carrera",
     from: META_SECOND_FROM,
     source: "meta_ads",
-    preSeed: { message: "Hola", source: "meta_ads" },
+    first_message: false,
+    preSeed: { message: "Hola", source: "meta_ads", first_message: true },
     message: "Quiero información de Psicología",
     comment: "Teléfono aislado: primer msg meta seed, segundo con carrera.",
     evaluate(body, s) {
@@ -388,6 +380,8 @@ async function postCase(tc, suffix = "") {
     timestamp: new Date().toISOString(),
   };
   if (tc.source) payload.source = tc.source;
+  if (tc.first_message === true) payload.first_message = true;
+  if (tc.first_message === false) payload.first_message = false;
   const res = await fetch(ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -524,7 +518,13 @@ async function main() {
   for (const tc of ordered) {
     if (tc.preSeed) {
       await postCase(
-        { id: `${tc.id}-seed`, from: tc.from, message: tc.preSeed.message, source: tc.preSeed.source },
+        {
+          id: `${tc.id}-seed`,
+          from: tc.from,
+          message: tc.preSeed.message,
+          source: tc.preSeed.source,
+          first_message: tc.preSeed.first_message,
+        },
         "-seed"
       );
       await sleep(DELAY_MS);

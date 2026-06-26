@@ -389,6 +389,41 @@ function extractMessageText(message, body) {
   return null;
 }
 
+function normalizePayloadTrafficSource(raw) {
+  const s = String(raw || "")
+    .toLowerCase()
+    .trim();
+  if (!s) return null;
+  if (s === "meta_ads" || s === "meta" || s === "meta-ads" || s === "facebook" || s === "instagram") {
+    return "meta_ads";
+  }
+  return s;
+}
+
+function extractPayloadTrafficSource(body = {}) {
+  const candidates = [
+    body.source,
+    body.channel_source,
+    body.origin,
+    body.traffic_source,
+    body.referral?.source,
+    body.context?.source,
+    body.referral?.type === "ad" ? "meta_ads" : null,
+  ];
+  for (const c of candidates) {
+    const normalized = normalizePayloadTrafficSource(c);
+    if (normalized) return normalized;
+  }
+  if (body.referral?.ad_id || body.referral?.campaign_id) return "meta_ads";
+  return null;
+}
+
+function extractPayloadFirstMessageFlag(body = {}) {
+  if (body.first_message === true || body.firstMessage === true) return true;
+  if (body.first_message === false || body.firstMessage === false) return false;
+  return null;
+}
+
 function parseInboundPayload(payload) {
   const body = payload || {};
   const inbound =
@@ -450,6 +485,10 @@ function parseInboundPayload(payload) {
       body.ts ||
       new Date().toISOString(),
     provider: body.type || body.whatsappInboundMessage ? "ycloud" : "mock",
+    source: extractPayloadTrafficSource(body),
+    first_message: extractPayloadFirstMessageFlag(body),
+    referral_ad_id: body.referral?.ad_id || null,
+    referral_campaign_id: body.referral?.campaign_id || null,
   };
 }
 
@@ -1915,12 +1954,12 @@ function buildGhlRelevanceConfigFromHandlerConfig(config) {
 }
 
 function resolveInboundTrafficSource(parsed, contactContext) {
+  if (parsed?.source) return parsed.source;
   const raw =
-    parsed?.source ||
     parsed?.traffic_source ||
     contactContext?.wa_source ||
     contactContext?.source ||
-  "";
+    "";
   const normalized = String(raw || "").toLowerCase().trim();
   if (normalized === "meta_ads" || normalized === "meta" || normalized === "meta-ads") {
     return "meta_ads";
@@ -1935,6 +1974,7 @@ async function computeGhlRelevanceShadow({
   messageText,
   messageType,
   source,
+  firstMessage,
   academicMeta,
 }) {
   if (config.ghlRelevanceShadowMode === false) {
@@ -1948,6 +1988,7 @@ async function computeGhlRelevanceShadow({
     messageText,
     messageType,
     source,
+    firstMessage,
     academicResult: academicMeta,
     config: buildGhlRelevanceConfigFromHandlerConfig(config),
   });
@@ -2373,6 +2414,7 @@ module.exports = async function handler(request) {
       messageText: parsed.message_text,
       messageType: parsed.message_type,
       source: resolveInboundTrafficSource(parsed, contactContext),
+      firstMessage: parsed.first_message,
       academicMeta: enrichResult.academicMeta,
     });
     const ycloudSend = await sendYCloudMessage({

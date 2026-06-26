@@ -1,5 +1,5 @@
 /**
- * GHL Relevance Gate — pure decision logic (7G.7B shadow).
+ * GHL Relevance Gate — pure decision logic (7G.7B shadow / 7G.7B.2 calibration).
  * No GHL / YCloud / OpenAI / DB calls.
  */
 
@@ -39,6 +39,11 @@ const HIGH_VALUE_INTENTS = new Set([
   "queja",
   "beca",
   "carrera_interes",
+  "test_vocacional",
+  "no_se_que_estudiar",
+  "documentos",
+  "carreras_disponibles",
+  "costo",
 ]);
 
 const HUMAN_HANDOFF_INTENTS = new Set([
@@ -56,6 +61,85 @@ const PRESERVE_HUMAN_STAGES = new Set([
   "soporte_test",
   "post_test",
 ]);
+
+const ENROLLMENT_PHRASES = [
+  "inscribirme",
+  "inscripcion",
+  "inscribir",
+  "quiero entrar",
+  "quiero empezar",
+  "iniciar esta semana",
+  "hacer mi proceso",
+  "apartar mi lugar",
+  "proceso de inscripcion",
+  "quiero inscribir",
+];
+
+const ORIENTATION_PHRASES = [
+  "no se que estudiar",
+  "no sé qué estudiar",
+  "orientar",
+  "orientacion",
+  "orientación",
+  "que carrera me conviene",
+  "qué carrera me conviene",
+  "que estudiar",
+  "qué estudiar",
+  "me pueden orientar",
+  "me puede orientar",
+];
+
+const VOCATIONAL_PHRASES = [
+  "test vocacional",
+  "hacer el test",
+  "hacer test vocacional",
+  "quiero hacer el test",
+];
+
+const DOCUMENT_PHRASES = [
+  "documentos",
+  "requisitos",
+  "papeles",
+  "acta",
+  "certificado",
+];
+
+const PARENT_PHRASES = [
+  "mama",
+  "mamá",
+  "mama de",
+  "mamá de",
+  "papa",
+  "papá",
+  "papa de",
+  "papá de",
+  "padre",
+  "madre",
+  "mi hijo",
+  "mi hija",
+  "tutor",
+];
+
+const URGENCY_PHRASES = [
+  "urgente",
+  "hoy",
+  "antes de",
+  "cierre",
+  "esta semana",
+  "lo antes posible",
+  "este mes",
+  " ya ",
+];
+
+const MODALITY_PHRASES = [
+  "modalidad",
+  "en linea",
+  "en línea",
+  "online",
+  "presencial",
+  "sabatino",
+  "semipresencial",
+];
 
 const CAREER_KEYWORDS = [
   "derecho",
@@ -105,6 +189,11 @@ function normalizeText(input) {
     .trim();
 }
 
+function textIncludesAny(t, phrases) {
+  const n = normalizeText(t);
+  return phrases.some((p) => n.includes(normalizeText(p)));
+}
+
 function envBool(value, defaultValue) {
   if (value === undefined || value === null || value === "") return defaultValue;
   return String(value).toLowerCase() === "true";
@@ -136,17 +225,59 @@ export function normalizeGhlRelevanceConfig(env = {}) {
   };
 }
 
+export function normalizeTrafficSource(raw) {
+  const s = String(raw || "")
+    .toLowerCase()
+    .trim();
+  if (!s) return null;
+  if (s === "meta_ads" || s === "meta" || s === "meta-ads" || s === "facebook" || s === "instagram") {
+    return "meta_ads";
+  }
+  return s;
+}
+
+export function extractTrafficSourceFromPayload(body = {}) {
+  const candidates = [
+    body.source,
+    body.channel_source,
+    body.origin,
+    body.traffic_source,
+    body.referral?.source,
+    body.context?.source,
+    body.referral?.type === "ad" ? "meta_ads" : null,
+  ];
+  for (const c of candidates) {
+    const normalized = normalizeTrafficSource(c);
+    if (normalized === "meta_ads") return "meta_ads";
+    if (normalized) return normalized;
+  }
+  if (body.referral?.ad_id || body.referral?.campaign_id) return "meta_ads";
+  return null;
+}
+
+export function extractFirstMessageFlag(body = {}) {
+  if (body.first_message === true || body.firstMessage === true) return true;
+  if (body.first_message === false || body.firstMessage === false) return false;
+  return null;
+}
+
 function shouldPreserveHumanContext(contactContext = {}) {
   if (contactContext.wa_needs_human === true) return true;
   const stage = contactContext.wa_stage || "";
   return PRESERVE_HUMAN_STAGES.has(stage);
 }
 
-function isFirstMessage(contactContext = {}) {
+function isFirstMessageFromContext(contactContext = {}) {
   if (!contactContext || Object.keys(contactContext).length === 0) return true;
   const stage = contactContext.wa_stage;
   if (!stage || stage === "inicio") return true;
   return false;
+}
+
+export function resolveFirstMessage(input = {}) {
+  if (input.firstMessage === true) return true;
+  if (input.firstMessage === false) return false;
+  return isFirstMessageFromContext(input.contactContext);
 }
 
 function isSaludoOnly(messageText) {
@@ -182,7 +313,50 @@ function isEmojiOnly(messageText) {
 
 function hasCareerMention(messageText) {
   const t = normalizeText(messageText);
-  return CAREER_KEYWORDS.some((k) => t.includes(normalizeText(k)));
+  if (CAREER_KEYWORDS.some((k) => t.includes(normalizeText(k)))) return true;
+  if (
+    t.includes("carrera") &&
+    (t.includes("interesa") ||
+      t.includes("informacion") ||
+      t.includes("información") ||
+      t.includes("conviene") ||
+      t.includes("orientar") ||
+      t.includes("estudiar"))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function hasExplicitEnrollmentSignal(messageText) {
+  const t = normalizeText(messageText);
+  return ENROLLMENT_PHRASES.some((p) => t.includes(normalizeText(p))) || t.includes("inscri");
+}
+
+export function hasOrientationSignal(messageText, intent) {
+  const t = normalizeText(messageText);
+  if (intent === "no_se_que_estudiar") return true;
+  if (textIncludesAny(messageText, ORIENTATION_PHRASES)) return true;
+  if (t.includes("carrera") && (t.includes("conviene") || t.includes("orientar") || t.includes("orientacion"))) {
+    return true;
+  }
+  return false;
+}
+
+export function hasVocationalTestSignal(messageText, intent) {
+  if (intent === "test_vocacional" || intent === "duda_test") return true;
+  return textIncludesAny(messageText, VOCATIONAL_PHRASES);
+}
+
+export function hasDocumentsEnrollmentSignal(messageText) {
+  const t = normalizeText(messageText);
+  const hasDocs = DOCUMENT_PHRASES.some((p) => t.includes(normalizeText(p)));
+  const hasEnrollment = hasExplicitEnrollmentSignal(messageText);
+  return hasDocs && (hasEnrollment || t.includes("inscri"));
+}
+
+export function hasParentGuardianSignal(messageText) {
+  return textIncludesAny(messageText, PARENT_PHRASES);
 }
 
 export function hasBusinessSignal(input = {}) {
@@ -193,9 +367,12 @@ export function hasBusinessSignal(input = {}) {
   if (intentDecision?.createTask === true) return true;
   if (contactContext?.wa_needs_human === true) return true;
 
+  if (hasExplicitEnrollmentSignal(messageText)) return true;
+  if (hasOrientationSignal(messageText, intent)) return true;
+  if (hasVocationalTestSignal(messageText, intent)) return true;
+  if (hasDocumentsEnrollmentSignal(messageText)) return true;
+
   if (
-    t.includes("inscri") ||
-    t.includes("inscribir") ||
     t.includes("quiero estudiar") ||
     t.includes("me interesa")
   ) {
@@ -242,17 +419,22 @@ function resolveEffectiveIntent(input) {
   if (isSpamMessage(messageText)) return "spam";
   if (isEmojiOnly(messageText)) return "emoji";
   if (isMediaNoText(input.messageType, messageText)) return "media_no_text";
+  if (hasExplicitEnrollmentSignal(messageText) && intent === "ambiguo") return "inscripcion";
+  if (hasDocumentsEnrollmentSignal(messageText) && intent === "ambiguo") return "documentos";
   return intent;
 }
 
 export function requiresHumanHandoff(input = {}) {
-  const reason = getHumanHandoffReason(input);
-  return Boolean(reason);
+  return Boolean(getHumanHandoffReason(input));
 }
 
 export function getHumanHandoffReason(input = {}) {
   const { intent, intentDecision, messageText, academicResult } = input;
   const t = normalizeText(messageText);
+
+  if (hasExplicitEnrollmentSignal(messageText) && !isSaludoOnly(messageText)) {
+    return "explicit_enrollment_intent";
+  }
 
   if (HUMAN_HANDOFF_INTENTS.has(intent)) {
     if (intent === "fuera_de_knowledge") {
@@ -281,6 +463,7 @@ export function getHumanHandoffReason(input = {}) {
     t.includes("llamada") ||
     t.includes("asesor") ||
     t.includes("persona") ||
+    t.includes("hablar con") ||
     t.includes("me puede llamar")
   ) {
     return "explicit_human_request";
@@ -294,7 +477,7 @@ export function getHumanHandoffReason(input = {}) {
 }
 
 export function computeLeadScore(input = {}) {
-  const { intent, messageText, contactContext, academicResult } = input;
+  const { intent, messageText } = input;
   const t = normalizeText(messageText);
   const breakdown = [];
   let score = 0;
@@ -305,8 +488,8 @@ export function computeLeadScore(input = {}) {
     score += points;
   };
 
-  if (t.includes("inscri") || t.includes("inscribir") || intent === "inscripcion") {
-    add("explicit_enrollment", 40);
+  if (hasExplicitEnrollmentSignal(messageText) || intent === "inscripcion") {
+    add("explicit_enrollment_intent", 40);
   }
   if (intent === "carrera_interes" || hasCareerMention(messageText)) {
     add("career_interest", 30);
@@ -325,35 +508,24 @@ export function computeLeadScore(input = {}) {
     add("beca_qualification_context", 20);
   }
   if (intent === "humano" || t.includes("asesor") || t.includes("hablar con")) {
-    add("human_advisor", 20);
+    add("advisor_request", 20);
   }
-  if (
-    t.includes("urgente") ||
-    t.includes("hoy") ||
-    t.includes("antes de") ||
-    t.includes("cierre")
-  ) {
+  if (textIncludesAny(messageText, URGENCY_PHRASES) || t.includes("esta semana")) {
     add("urgency", 15);
   }
-  if (t.includes("modalidad") || t.includes("en linea") || t.includes("online") || t.includes("sabat")) {
+  if (textIncludesAny(messageText, MODALITY_PHRASES)) {
     add("modality", 10);
   }
-  if (
-    intent === "no_se_que_estudiar" ||
-    intent === "test_vocacional" ||
-    intent === "post_test" ||
-    intent === "duda_test" ||
-    t.includes("test vocacional")
-  ) {
-    add("vocational_test", 10);
+  if (hasVocationalTestSignal(messageText, intent)) {
+    add("vocational_test", 25);
   }
-  if (
-    t.includes("padre") ||
-    t.includes("madre") ||
-    t.includes("tutor") ||
-    t.includes("papá") ||
-    t.includes("mama")
-  ) {
+  if (hasOrientationSignal(messageText, intent)) {
+    add("orientation_signal", 20);
+  }
+  if (hasDocumentsEnrollmentSignal(messageText) || (intent === "documentos" && t.includes("document"))) {
+    add("documents_or_requirements", 20);
+  }
+  if (hasParentGuardianSignal(messageText)) {
     add("parent_or_guardian", 5);
   }
 
@@ -425,6 +597,40 @@ function applyQualifiedWithTask(base, humanHandoffReason, reason) {
   };
 }
 
+function detectCalibratedLeadException(input, effectiveIntent, intent) {
+  const { messageText } = input;
+  const t = normalizeText(messageText);
+
+  if (hasExplicitEnrollmentSignal(messageText) && !isSaludoOnly(messageText)) {
+    return { reason: "explicit_enrollment_intent", withTask: true, handoff: "explicit_enrollment_intent" };
+  }
+
+  if (hasDocumentsEnrollmentSignal(messageText)) {
+    return { reason: "documents_enrollment_signal", withTask: false, handoff: null };
+  }
+
+  if (hasVocationalTestSignal(messageText, intent) && !t.includes("asesor")) {
+    return { reason: "vocational_test_lead", withTask: false, handoff: null };
+  }
+
+  if (hasOrientationSignal(messageText, intent) && !t.includes("asesor") && !t.includes("llamada")) {
+    return { reason: "orientation_lead", withTask: false, handoff: null };
+  }
+
+  if (
+    (intent === "carrera_interes" || effectiveIntent === "carrera_interes") &&
+    hasCareerMention(messageText)
+  ) {
+    return { reason: "high_value_intent_exception", withTask: false, handoff: null };
+  }
+
+  if (isHighValueIntent(intent) || isHighValueIntent(effectiveIntent)) {
+    return { reason: "high_value_intent_exception", withTask: false, handoff: null };
+  }
+
+  return null;
+}
+
 export function evaluateGhlRelevance(input = {}) {
   const config = input.config || normalizeGhlRelevanceConfig(input.env || {});
   const { lead_score, score_breakdown } = computeLeadScore(input);
@@ -437,6 +643,7 @@ export function evaluateGhlRelevance(input = {}) {
   const intent = input.intent;
   const effectiveIntent = resolveEffectiveIntent(input);
   const { contactContext, messageText, source, intentDecision } = input;
+  const firstMessage = resolveFirstMessage(input);
   const threshold =
     source === "meta_ads" ? config.ghlMetaAdsLeadScoreThreshold : config.ghlLeadScoreThreshold;
 
@@ -454,9 +661,12 @@ export function evaluateGhlRelevance(input = {}) {
 
   if (
     source === "meta_ads" &&
-    isFirstMessage(contactContext) &&
+    firstMessage &&
     config.metaAdsFirstMessageNoSync &&
-    (effectiveIntent === "saludo" || effectiveIntent === "ambiguo" || isSaludoOnly(messageText))
+    (effectiveIntent === "saludo" ||
+      effectiveIntent === "ambiguo" ||
+      isSaludoOnly(messageText)) &&
+    !hasBusinessSignal(input)
   ) {
     return {
       ...base,
@@ -493,10 +703,31 @@ export function evaluateGhlRelevance(input = {}) {
     };
   }
 
+  if (
+    hasDocumentsEnrollmentSignal(messageText) &&
+    !textIncludesAny(messageText, ["esta semana", "urgente", "hoy", "ya"])
+  ) {
+    return applyQualifiedContactNote(base, "documents_enrollment_signal");
+  }
+
   const humanHandoffReason = getHumanHandoffReason({ ...input, intent: effectiveIntent });
 
   if (humanHandoffReason) {
-    return applyQualifiedWithTask(base, humanHandoffReason, "human_handoff");
+    const routingReason =
+      humanHandoffReason === "explicit_human_request"
+        ? "explicit_human_handoff"
+        : humanHandoffReason === "explicit_enrollment_intent"
+          ? "explicit_enrollment_intent"
+          : "human_handoff";
+    return applyQualifiedWithTask(base, humanHandoffReason, routingReason);
+  }
+
+  const calibrated = detectCalibratedLeadException(input, effectiveIntent, intent);
+  if (calibrated) {
+    if (calibrated.withTask) {
+      return applyQualifiedWithTask(base, calibrated.handoff, calibrated.reason);
+    }
+    return applyQualifiedContactNote(base, calibrated.reason);
   }
 
   if (lead_score >= 60) {
