@@ -120,6 +120,14 @@ function getConfig() {
     evaLlmTimeoutMs: Number(Deno.env.get("EVA_LLM_TIMEOUT_MS") || "12000"),
     evaLlmFailOpen: Deno.env.get("EVA_LLM_FAIL_OPEN") !== "false",
     openaiApiKey: Deno.env.get("OPENAI_API_KEY") || "",
+    ghlRelevanceShadowMode: Deno.env.get("GHL_RELEVANCE_SHADOW_MODE") !== "false",
+    ghlSyncPolicy: Deno.env.get("GHL_SYNC_POLICY") || "none",
+    ghlLeadScoreThreshold: Number(Deno.env.get("GHL_LEAD_SCORE_THRESHOLD") || "45"),
+    ghlMetaAdsLeadScoreThreshold: Number(
+      Deno.env.get("GHL_META_ADS_LEAD_SCORE_THRESHOLD") || "50"
+    ),
+    metaAdsFirstMessageNoSync: Deno.env.get("META_ADS_FIRST_MESSAGE_NO_SYNC") !== "false",
+    metaAdsRequireQualification: Deno.env.get("META_ADS_REQUIRE_QUALIFICATION") !== "false",
   };
 }
 
@@ -1882,6 +1890,69 @@ function classifyIntent(rawText, config, contactContext = {}) {
 }
 
 let _academicEngineModules = null;
+let _ghlRelevanceGateModule = null;
+
+async function loadGhlRelevanceGateModule() {
+  if (!_ghlRelevanceGateModule) {
+    _ghlRelevanceGateModule = await import("./lib/ghl-relevance-gate.js");
+  }
+  return _ghlRelevanceGateModule;
+}
+
+function buildGhlRelevanceConfigFromHandlerConfig(config) {
+  return {
+    ghlRelevanceShadowMode: config.ghlRelevanceShadowMode !== false,
+    ghlSyncPolicy: config.ghlSyncPolicy || "none",
+    ghlLeadScoreThreshold: Number.isFinite(config.ghlLeadScoreThreshold)
+      ? config.ghlLeadScoreThreshold
+      : 45,
+    ghlMetaAdsLeadScoreThreshold: Number.isFinite(config.ghlMetaAdsLeadScoreThreshold)
+      ? config.ghlMetaAdsLeadScoreThreshold
+      : 50,
+    metaAdsFirstMessageNoSync: config.metaAdsFirstMessageNoSync !== false,
+    metaAdsRequireQualification: config.metaAdsRequireQualification !== false,
+  };
+}
+
+function resolveInboundTrafficSource(parsed, contactContext) {
+  const raw =
+    parsed?.source ||
+    parsed?.traffic_source ||
+    contactContext?.wa_source ||
+    contactContext?.source ||
+  "";
+  const normalized = String(raw || "").toLowerCase().trim();
+  if (normalized === "meta_ads" || normalized === "meta" || normalized === "meta-ads") {
+    return "meta_ads";
+  }
+  return "organic";
+}
+
+async function computeGhlRelevanceShadow({
+  config,
+  enrichedDecision,
+  contactContext,
+  messageText,
+  messageType,
+  source,
+  academicMeta,
+}) {
+  if (config.ghlRelevanceShadowMode === false) {
+    return null;
+  }
+  const gate = await loadGhlRelevanceGateModule();
+  const decision = gate.evaluateGhlRelevance({
+    intent: enrichedDecision.intent,
+    intentDecision: enrichedDecision,
+    contactContext,
+    messageText,
+    messageType,
+    source,
+    academicResult: academicMeta,
+    config: buildGhlRelevanceConfigFromHandlerConfig(config),
+  });
+  return gate.formatGhlRelevanceShadowPayload(decision);
+}
 
 async function loadAcademicEngineModules() {
   if (!_academicEngineModules) {
@@ -2295,6 +2366,15 @@ module.exports = async function handler(request) {
       });
     }
     enrichedDecision.waSummary = buildOperationalWaSummary(enrichedDecision, parsed.message_text);
+    const ghlRelevanceShadow = await computeGhlRelevanceShadow({
+      config,
+      enrichedDecision,
+      contactContext,
+      messageText: parsed.message_text,
+      messageType: parsed.message_type,
+      source: resolveInboundTrafficSource(parsed, contactContext),
+      academicMeta: enrichResult.academicMeta,
+    });
     const ycloudSend = await sendYCloudMessage({
       config,
       to: normalizedPhone || parsed.from || null,
@@ -2497,6 +2577,7 @@ module.exports = async function handler(request) {
       custom_fields_skipped_reason: ghlSync?.custom_fields_skipped_reason || null,
       custom_fields_ghl_api_shape_preview:
         ghlSync?.custom_fields_ghl_api_shape_preview || null,
+      ghl_relevance_shadow: ghlRelevanceShadow,
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
@@ -2536,3 +2617,5 @@ handler.getConfig = getConfig;
 handler.parseGhlLiveAllowedPhones = parseGhlLiveAllowedPhones;
 handler.resolveGhlLiveAllowlist = resolveGhlLiveAllowlist;
 handler.syncGHLContact = syncGHLContact;
+handler.computeGhlRelevanceShadow = computeGhlRelevanceShadow;
+handler.buildGhlRelevanceConfigFromHandlerConfig = buildGhlRelevanceConfigFromHandlerConfig;

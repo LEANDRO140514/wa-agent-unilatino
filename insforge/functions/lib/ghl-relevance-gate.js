@@ -1,0 +1,568 @@
+/**
+ * GHL Relevance Gate — pure decision logic (7G.7B shadow).
+ * No GHL / YCloud / OpenAI / DB calls.
+ */
+
+const IGNORED_INTENTS = new Set([
+  "saludo",
+  "agradecimiento",
+  "despedida",
+  "sin_texto",
+  "spam",
+  "emoji",
+  "wrong_number",
+  "media_no_text",
+]);
+
+const RELEVANT_INTENTS = new Set([
+  "carrera_interes",
+  "carreras_disponibles",
+  "beca",
+  "costo",
+  "inscripcion",
+  "documentos",
+  "modalidad",
+  "no_se_que_estudiar",
+  "test_vocacional",
+  "post_test",
+  "humano",
+  "duda_test",
+  "fuera_de_knowledge",
+  "queja",
+]);
+
+const HIGH_VALUE_INTENTS = new Set([
+  "humano",
+  "inscripcion",
+  "post_test",
+  "duda_test",
+  "queja",
+  "beca",
+  "carrera_interes",
+]);
+
+const HUMAN_HANDOFF_INTENTS = new Set([
+  "humano",
+  "inscripcion",
+  "duda_test",
+  "post_test",
+  "queja",
+  "fuera_de_knowledge",
+]);
+
+const PRESERVE_HUMAN_STAGES = new Set([
+  "asesor_requerido",
+  "beca_interes",
+  "soporte_test",
+  "post_test",
+]);
+
+const CAREER_KEYWORDS = [
+  "derecho",
+  "psicologia",
+  "administracion",
+  "contaduria",
+  "mercadotecnia",
+  "educacion",
+  "enfermeria",
+  "arquitectura",
+  "ingenieria",
+  "sistemas",
+  "criminologia",
+  "nutricion",
+  "diseno",
+  "gastronomia",
+  "gastronomía",
+  "psicología",
+];
+
+const SPAM_PATTERNS = [
+  "gana dinero",
+  "ganar dinero",
+  "http://",
+  "https://",
+  "www.",
+  "click aqui",
+  "click aquí",
+  "criptomoneda",
+  "bitcoin gratis",
+];
+
+const DEFAULTS = {
+  ghlRelevanceShadowMode: true,
+  ghlSyncPolicy: "none",
+  ghlLeadScoreThreshold: 45,
+  ghlMetaAdsLeadScoreThreshold: 50,
+  metaAdsFirstMessageNoSync: true,
+  metaAdsRequireQualification: true,
+};
+
+function normalizeText(input) {
+  return String(input || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function envBool(value, defaultValue) {
+  if (value === undefined || value === null || value === "") return defaultValue;
+  return String(value).toLowerCase() === "true";
+}
+
+function envInt(value, defaultValue) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : defaultValue;
+}
+
+export function normalizeGhlRelevanceConfig(env = {}) {
+  const get = (key) => env[key] ?? env[key.toLowerCase?.()] ?? undefined;
+  return {
+    ghlRelevanceShadowMode: envBool(get("GHL_RELEVANCE_SHADOW_MODE"), DEFAULTS.ghlRelevanceShadowMode),
+    ghlSyncPolicy: String(get("GHL_SYNC_POLICY") || DEFAULTS.ghlSyncPolicy).toLowerCase(),
+    ghlLeadScoreThreshold: envInt(get("GHL_LEAD_SCORE_THRESHOLD"), DEFAULTS.ghlLeadScoreThreshold),
+    ghlMetaAdsLeadScoreThreshold: envInt(
+      get("GHL_META_ADS_LEAD_SCORE_THRESHOLD"),
+      DEFAULTS.ghlMetaAdsLeadScoreThreshold
+    ),
+    metaAdsFirstMessageNoSync: envBool(
+      get("META_ADS_FIRST_MESSAGE_NO_SYNC"),
+      DEFAULTS.metaAdsFirstMessageNoSync
+    ),
+    metaAdsRequireQualification: envBool(
+      get("META_ADS_REQUIRE_QUALIFICATION"),
+      DEFAULTS.metaAdsRequireQualification
+    ),
+  };
+}
+
+function shouldPreserveHumanContext(contactContext = {}) {
+  if (contactContext.wa_needs_human === true) return true;
+  const stage = contactContext.wa_stage || "";
+  return PRESERVE_HUMAN_STAGES.has(stage);
+}
+
+function isFirstMessage(contactContext = {}) {
+  if (!contactContext || Object.keys(contactContext).length === 0) return true;
+  const stage = contactContext.wa_stage;
+  if (!stage || stage === "inicio") return true;
+  return false;
+}
+
+function isSaludoOnly(messageText) {
+  const t = normalizeText(messageText);
+  if (!t) return false;
+  const greetings = [
+    "hola",
+    "buenas",
+    "buen dia",
+    "buenos dias",
+    "buenas tardes",
+    "buenas noches",
+    "hey",
+    "que tal",
+    "saludos",
+  ];
+  const matched = greetings.some((g) => t === g || t.startsWith(`${g} `) || t.startsWith(`${g},`));
+  if (!matched) return false;
+  const stripped = greetings.reduce((s, g) => s.replace(g, "").trim(), t);
+  return stripped.length <= 12 || t.split(/\s+/).length <= 3;
+}
+
+function isSpamMessage(messageText) {
+  const t = normalizeText(messageText);
+  return SPAM_PATTERNS.some((p) => t.includes(normalizeText(p)));
+}
+
+function isEmojiOnly(messageText) {
+  const t = String(messageText || "").trim();
+  if (!t) return false;
+  return /^[\p{Emoji}\p{Extended_Pictographic}\s]+$/u.test(t) && t.length <= 8;
+}
+
+function hasCareerMention(messageText) {
+  const t = normalizeText(messageText);
+  return CAREER_KEYWORDS.some((k) => t.includes(normalizeText(k)));
+}
+
+export function hasBusinessSignal(input = {}) {
+  const { intent, messageText, contactContext, academicResult, intentDecision } = input;
+  const t = normalizeText(messageText);
+
+  if (RELEVANT_INTENTS.has(intent)) return true;
+  if (intentDecision?.createTask === true) return true;
+  if (contactContext?.wa_needs_human === true) return true;
+
+  if (
+    t.includes("inscri") ||
+    t.includes("inscribir") ||
+    t.includes("quiero estudiar") ||
+    t.includes("me interesa")
+  ) {
+    return true;
+  }
+  if (t.includes("beca") || t.includes("promedio") || t.includes("costo") || t.includes("cuanto")) {
+    return true;
+  }
+  if (t.includes("asesor") || t.includes("persona") || t.includes("llamada")) {
+    return true;
+  }
+  if (hasCareerMention(messageText)) return true;
+
+  if (academicResult?.academic_enriched === true) return true;
+  if (academicResult?.academic_intent && academicResult.academic_intent !== "fallback") {
+    return true;
+  }
+
+  return false;
+}
+
+export function isIgnoredIntent(intent) {
+  return IGNORED_INTENTS.has(intent);
+}
+
+export function isRelevantIntent(intent) {
+  return RELEVANT_INTENTS.has(intent);
+}
+
+function isHighValueIntent(intent) {
+  return HIGH_VALUE_INTENTS.has(intent);
+}
+
+function isMediaNoText(messageType, messageText) {
+  const type = String(messageType || "text").toLowerCase();
+  const text = String(messageText || "").trim();
+  if (type !== "text" && !text) return true;
+  return false;
+}
+
+function resolveEffectiveIntent(input) {
+  const { intent, messageText } = input;
+  if (intent === "ambiguo" && isSaludoOnly(messageText)) return "saludo";
+  if (isSpamMessage(messageText)) return "spam";
+  if (isEmojiOnly(messageText)) return "emoji";
+  if (isMediaNoText(input.messageType, messageText)) return "media_no_text";
+  return intent;
+}
+
+export function requiresHumanHandoff(input = {}) {
+  const reason = getHumanHandoffReason(input);
+  return Boolean(reason);
+}
+
+export function getHumanHandoffReason(input = {}) {
+  const { intent, intentDecision, messageText, academicResult } = input;
+  const t = normalizeText(messageText);
+
+  if (HUMAN_HANDOFF_INTENTS.has(intent)) {
+    if (intent === "fuera_de_knowledge") {
+      return hasBusinessSignal(input) ? "fuera_de_knowledge_commercial" : null;
+    }
+    return `intent_${intent}`;
+  }
+
+  if (intentDecision?.createTask === true && (intent === "humano" || intent === "beca")) {
+    return `intent_${intent}_task`;
+  }
+
+  if (intent === "beca" && academicResult?.academic_pending_validation_used === true) {
+    return "beca_no_validada";
+  }
+
+  if (
+    (intent === "beca" || intent === "costo" || t.includes("cuanto cuesta")) &&
+    academicResult?.academic_enriched === false &&
+    academicResult?.academic_intent === "fallback"
+  ) {
+    return "costo_no_validado";
+  }
+
+  if (
+    t.includes("llamada") ||
+    t.includes("asesor") ||
+    t.includes("persona") ||
+    t.includes("me puede llamar")
+  ) {
+    return "explicit_human_request";
+  }
+
+  if (t.includes("frustrad") || t.includes("mal servicio") || t.includes("queja")) {
+    return "frustration_or_complaint";
+  }
+
+  return null;
+}
+
+export function computeLeadScore(input = {}) {
+  const { intent, messageText, contactContext, academicResult } = input;
+  const t = normalizeText(messageText);
+  const breakdown = [];
+  let score = 0;
+
+  const add = (rule, points) => {
+    if (!points) return;
+    breakdown.push({ rule, points });
+    score += points;
+  };
+
+  if (t.includes("inscri") || t.includes("inscribir") || intent === "inscripcion") {
+    add("explicit_enrollment", 40);
+  }
+  if (intent === "carrera_interes" || hasCareerMention(messageText)) {
+    add("career_interest", 30);
+  }
+  if (
+    intent === "beca" ||
+    intent === "costo" ||
+    t.includes("beca") ||
+    t.includes("promedio") ||
+    t.includes("costo") ||
+    t.includes("cuanto cuesta")
+  ) {
+    add("scholarship_or_cost", 25);
+  }
+  if (intent === "beca" && (t.includes("promedio") || t.includes("gpa"))) {
+    add("beca_qualification_context", 20);
+  }
+  if (intent === "humano" || t.includes("asesor") || t.includes("hablar con")) {
+    add("human_advisor", 20);
+  }
+  if (
+    t.includes("urgente") ||
+    t.includes("hoy") ||
+    t.includes("antes de") ||
+    t.includes("cierre")
+  ) {
+    add("urgency", 15);
+  }
+  if (t.includes("modalidad") || t.includes("en linea") || t.includes("online") || t.includes("sabat")) {
+    add("modality", 10);
+  }
+  if (
+    intent === "no_se_que_estudiar" ||
+    intent === "test_vocacional" ||
+    intent === "post_test" ||
+    intent === "duda_test" ||
+    t.includes("test vocacional")
+  ) {
+    add("vocational_test", 10);
+  }
+  if (
+    t.includes("padre") ||
+    t.includes("madre") ||
+    t.includes("tutor") ||
+    t.includes("papá") ||
+    t.includes("mama")
+  ) {
+    add("parent_or_guardian", 5);
+  }
+
+  const effectiveIntent = resolveEffectiveIntent(input);
+  if (
+    (effectiveIntent === "ambiguo" || effectiveIntent === "saludo") &&
+    !hasBusinessSignal(input)
+  ) {
+    add("noise_or_ambiguous", -10);
+  }
+  if (effectiveIntent === "spam" || effectiveIntent === "emoji") {
+    add("spam_or_noise", -20);
+  }
+
+  score = Math.max(0, Math.min(100, score));
+
+  return { lead_score: score, score_breakdown: breakdown };
+}
+
+function buildShadowBase(config, lead_score, score_breakdown) {
+  return {
+    enabled: config.ghlRelevanceShadowMode,
+    policy: config.ghlSyncPolicy,
+    ghl_sync_policy: config.ghlSyncPolicy,
+    ghl_relevance_shadow_enabled: config.ghlRelevanceShadowMode,
+    lead_score,
+    score_breakdown,
+    qualified_for_ghl: false,
+    would_sync_to_ghl: false,
+    would_create_contact: false,
+    would_create_note: false,
+    would_create_task: false,
+    would_update_custom_fields: false,
+    routing_decision: "whatsapp_and_insforge_only",
+    routing_reason: null,
+    human_handoff_reason: null,
+    ignored_for_ghl: false,
+  };
+}
+
+function applyQualifiedContactNote(base, reason, qualified = true) {
+  return {
+    ...base,
+    qualified_for_ghl: qualified,
+    would_sync_to_ghl: true,
+    would_create_contact: true,
+    would_create_note: true,
+    would_create_task: false,
+    would_update_custom_fields: true,
+    routing_decision: "qualified_contact_note",
+    routing_reason: reason,
+    ignored_for_ghl: false,
+  };
+}
+
+function applyQualifiedWithTask(base, humanHandoffReason, reason) {
+  return {
+    ...base,
+    qualified_for_ghl: true,
+    would_sync_to_ghl: true,
+    would_create_contact: true,
+    would_create_note: true,
+    would_create_task: true,
+    would_update_custom_fields: true,
+    routing_decision: "qualified_contact_note_task",
+    routing_reason: reason,
+    human_handoff_reason: humanHandoffReason,
+    ignored_for_ghl: false,
+  };
+}
+
+export function evaluateGhlRelevance(input = {}) {
+  const config = input.config || normalizeGhlRelevanceConfig(input.env || {});
+  const { lead_score, score_breakdown } = computeLeadScore(input);
+  const base = buildShadowBase(config, lead_score, score_breakdown);
+
+  if (!config.ghlRelevanceShadowMode) {
+    return { ...base, routing_reason: "shadow_disabled" };
+  }
+
+  const intent = input.intent;
+  const effectiveIntent = resolveEffectiveIntent(input);
+  const { contactContext, messageText, source, intentDecision } = input;
+  const threshold =
+    source === "meta_ads" ? config.ghlMetaAdsLeadScoreThreshold : config.ghlLeadScoreThreshold;
+
+  if (
+    (intent === "agradecimiento" || intent === "despedida") &&
+    shouldPreserveHumanContext(contactContext)
+  ) {
+    return {
+      ...base,
+      ignored_for_ghl: true,
+      routing_reason: "post_escalation_closure_no_sync",
+      routing_decision: "whatsapp_and_insforge_only",
+    };
+  }
+
+  if (
+    source === "meta_ads" &&
+    isFirstMessage(contactContext) &&
+    config.metaAdsFirstMessageNoSync &&
+    (effectiveIntent === "saludo" || effectiveIntent === "ambiguo" || isSaludoOnly(messageText))
+  ) {
+    return {
+      ...base,
+      ignored_for_ghl: true,
+      routing_reason: "meta_ads_first_message_no_sync",
+      routing_decision: "whatsapp_and_insforge_only",
+    };
+  }
+
+  if (effectiveIntent === "sin_texto" || effectiveIntent === "media_no_text") {
+    return {
+      ...base,
+      ignored_for_ghl: true,
+      routing_reason: "ignored_intent",
+      routing_decision: "whatsapp_and_insforge_only",
+    };
+  }
+
+  if (effectiveIntent === "spam" || effectiveIntent === "emoji") {
+    return {
+      ...base,
+      ignored_for_ghl: true,
+      routing_reason: "ignored_intent",
+      routing_decision: "whatsapp_and_insforge_only",
+    };
+  }
+
+  if (isIgnoredIntent(effectiveIntent) && !hasBusinessSignal(input)) {
+    return {
+      ...base,
+      ignored_for_ghl: true,
+      routing_reason: "ignored_intent",
+      routing_decision: "whatsapp_and_insforge_only",
+    };
+  }
+
+  const humanHandoffReason = getHumanHandoffReason({ ...input, intent: effectiveIntent });
+
+  if (humanHandoffReason) {
+    return applyQualifiedWithTask(base, humanHandoffReason, "human_handoff");
+  }
+
+  if (lead_score >= 60) {
+    const wantsTask =
+      intentDecision?.createTask === true ||
+      isHighValueIntent(effectiveIntent) ||
+      isHighValueIntent(intent);
+    if (wantsTask) {
+      return applyQualifiedWithTask(base, null, "lead_score_high_with_task");
+    }
+    return applyQualifiedContactNote(base, "lead_score_threshold_met");
+  }
+
+  if (lead_score >= threshold) {
+    const wantsTask =
+      intentDecision?.createTask === true && (intent === "beca" || intent === "humano");
+    if (wantsTask) {
+      return {
+        ...applyQualifiedContactNote(base, "lead_score_threshold_met"),
+        would_create_task: true,
+        routing_decision: "qualified_contact_note_task",
+        human_handoff_reason: intent === "beca" ? "intent_beca_task" : null,
+      };
+    }
+    return applyQualifiedContactNote(base, "lead_score_threshold_met");
+  }
+
+  if (lead_score >= 30 && isHighValueIntent(intent)) {
+    return {
+      ...applyQualifiedContactNote(base, "high_value_intent_exception"),
+      routing_decision: "watch_only_or_high_value_exception",
+    };
+  }
+
+  if (source === "meta_ads" && config.metaAdsRequireQualification && lead_score < threshold) {
+    return {
+      ...base,
+      routing_reason: "meta_ads_below_threshold",
+      routing_decision: "watch_only_or_high_value_exception",
+    };
+  }
+
+  return {
+    ...base,
+    routing_reason: lead_score < 30 ? "below_threshold" : "watch_only_or_high_value_exception",
+    routing_decision:
+      lead_score < 30 ? "whatsapp_and_insforge_only" : "watch_only_or_high_value_exception",
+  };
+}
+
+export function formatGhlRelevanceShadowPayload(decision) {
+  if (!decision) return null;
+  return {
+    enabled: decision.enabled,
+    policy: decision.policy,
+    lead_score: decision.lead_score,
+    qualified_for_ghl: decision.qualified_for_ghl,
+    would_sync_to_ghl: decision.would_sync_to_ghl,
+    would_create_contact: decision.would_create_contact,
+    would_create_note: decision.would_create_note,
+    would_create_task: decision.would_create_task,
+    would_update_custom_fields: decision.would_update_custom_fields,
+    routing_decision: decision.routing_decision,
+    routing_reason: decision.routing_reason,
+    human_handoff_reason: decision.human_handoff_reason,
+    ignored_for_ghl: decision.ignored_for_ghl,
+    score_breakdown: decision.score_breakdown,
+  };
+}
