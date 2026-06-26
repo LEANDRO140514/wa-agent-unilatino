@@ -211,6 +211,65 @@ async function insertGhlAllowlistBlockedLog(client, baseLog, allowlist) {
   });
 }
 
+let _ghlSyncPolicyModule = null;
+
+async function loadGhlSyncPolicyModule() {
+  if (!_ghlSyncPolicyModule) {
+    _ghlSyncPolicyModule = await import("./lib/ghl-sync-policy.js");
+  }
+  return _ghlSyncPolicyModule;
+}
+
+async function resolveGhlSyncAuthorizationForHandler(config, relevanceDecision, allowlist) {
+  const mod = await loadGhlSyncPolicyModule();
+  return mod.resolveGhlSyncAuthorization({ config, relevanceDecision, allowlist });
+}
+
+async function enrichGhlSyncContextForHandler(baseContext, relevanceDecision, authDecision) {
+  const mod = await loadGhlSyncPolicyModule();
+  return mod.enrichGhlSyncContext(baseContext, relevanceDecision, authDecision);
+}
+
+async function insertGhlPolicyBlockedResult(client, config, context, relevanceDecision, authDecision) {
+  const logId = await insertGHLSyncLog(client, {
+    inbound_message_id: context.inboundId || null,
+    normalized_phone: context.normalizedPhone || null,
+    intent: context.intent || null,
+    sync_mode: config.ghlSyncMode === "live" ? "live" : "dry_run",
+    protected_fields: { phase_7g7c: "policy_gate_block" },
+    action: "policy_blocked",
+    status: authDecision.blockReason || "policy_blocked",
+    payload: {
+      policy: authDecision.policy,
+      block_reason: authDecision.blockReason,
+      routing_reason: relevanceDecision?.routing_reason || null,
+      lead_score: relevanceDecision?.lead_score ?? null,
+      ignored_for_ghl: relevanceDecision?.ignored_for_ghl === true,
+      would_sync_to_ghl: relevanceDecision?.would_sync_to_ghl === true,
+      qualified_for_ghl: relevanceDecision?.qualified_for_ghl === true,
+      human_handoff_reason: relevanceDecision?.human_handoff_reason || null,
+    },
+    would_create_contact: false,
+    would_update_contact: false,
+    would_create_task: false,
+    would_add_note: false,
+    would_add_tags: null,
+  });
+  return {
+    synced: false,
+    dry_run: config.ghlSyncMode !== "live",
+    live: config.ghlSyncMode === "live",
+    failed: false,
+    blocked: true,
+    policy_blocked: true,
+    block_reason: authDecision.blockReason,
+    ghl_sync_log_id: logId,
+    would_create_contact: false,
+    would_create_task: false,
+    would_add_note: false,
+  };
+}
+
 function buildYCloudTextPayload(from, to, text) {
   return {
     from,
@@ -873,6 +932,9 @@ function buildOperationalWaSummary(decision, messageText) {
 }
 
 function shouldCreateTaskDryRun(context) {
+  if (context.ghlSyncGovernedByGate === true) {
+    return context.ghlWouldCreateTask === true;
+  }
   return EVA_TASK_INTENTS.has(context.intent);
 }
 
@@ -895,6 +957,18 @@ function buildGHLNoteBody(context, modeLabel) {
   const lines = [
     modeLabel,
     "",
+  ];
+  if (context.ghlSyncGovernedByGate === true) {
+    lines.push(
+      "[Eva WA — qualified_only]",
+      `Lead score: ${context.ghlLeadScore ?? "—"}`,
+      `Routing: ${context.ghlRoutingReason || "—"}`,
+      `Handoff: ${context.ghlHumanHandoffReason || "—"}`,
+      `Policy: ${context.ghlSyncPolicy || "qualified_only"}`,
+      ""
+    );
+  }
+  lines.push(
     `Teléfono: ${context.normalizedPhone || "N/A"}`,
     `Intent: ${context.intent}`,
     `Prioridad: ${context.priority}`,
@@ -907,8 +981,8 @@ function buildGHLNoteBody(context, modeLabel) {
     `wa_needs_human: ${context.needsHuman ? "true" : "false"}`,
     `Resumen: ${context.waSummary || "N/A"}`,
     `Fecha/hora: ${context.timestamp}`,
-    "Fuente: YCloud / Eva WA",
-  ];
+    "Fuente: YCloud / Eva WA"
+  );
   if (context.after_hours_message) {
     lines.push(`Mensaje fuera de horario (referencia): ${context.after_hours_message}`);
   }
@@ -918,7 +992,17 @@ function buildGHLNoteBody(context, modeLabel) {
 function buildGHLDryRunPayload(context, existingGhlContactId, customFieldsState) {
   const tag = getIntentTag(context.intent);
   const tags = ["eva-wa", tag];
-  const note = buildGHLNoteBody(context, `[Eva WA dry-run] ${context.timestamp}`);
+  const governed = context.ghlSyncGovernedByGate === true;
+  const wouldCreateContact = governed
+    ? context.ghlWouldCreateContact === true && !existingGhlContactId
+    : !existingGhlContactId;
+  const wouldUpdateContact = governed
+    ? context.ghlWouldCreateContact === true && Boolean(existingGhlContactId)
+    : Boolean(existingGhlContactId);
+  const includeNote = governed ? context.ghlWouldCreateNote === true : true;
+  const note = includeNote
+    ? buildGHLNoteBody(context, `[Eva WA dry-run] ${context.timestamp}`)
+    : null;
 
   const waValues = buildWACustomFieldValues(context);
   const customFields = { ...waValues };
@@ -930,8 +1014,12 @@ function buildGHLDryRunPayload(context, existingGhlContactId, customFieldsState)
     waValues
   );
 
-  const wouldCreateContact = !existingGhlContactId;
-  const wouldUpdateContact = Boolean(existingGhlContactId);
+  const wouldCreateContactFinal = governed
+    ? context.ghlWouldCreateContact === true && !existingGhlContactId
+    : wouldCreateContact;
+  const wouldUpdateContactFinal = governed
+    ? context.ghlWouldCreateContact === true && Boolean(existingGhlContactId)
+    : wouldUpdateContact;
 
   const contactPayload = wouldCreateContact
     ? {
@@ -940,12 +1028,14 @@ function buildGHLDryRunPayload(context, existingGhlContactId, customFieldsState)
         tags,
         customFields,
       }
-    : {
-        id: existingGhlContactId,
-        phone: context.normalizedPhone,
-        tags_to_add: tags,
-        customFields,
-      };
+    : wouldUpdateContactFinal
+      ? {
+          id: existingGhlContactId,
+          phone: context.normalizedPhone,
+          tags_to_add: tags,
+          customFields,
+        }
+      : null;
 
   const taskPayload = shouldCreateTaskDryRun(context)
     ? {
@@ -969,7 +1059,11 @@ function buildGHLDryRunPayload(context, existingGhlContactId, customFieldsState)
   };
 
   return {
-    action: wouldCreateContact ? "would_create_contact" : "would_update_contact",
+    action: wouldCreateContact
+      ? "would_create_contact"
+      : wouldUpdateContactFinal
+        ? "would_update_contact"
+        : "policy_no_contact",
     contact: contactPayload,
     note,
     task: taskPayload,
@@ -998,8 +1092,8 @@ function buildGHLDryRunPayload(context, existingGhlContactId, customFieldsState)
       phase_3c_4: "write_gated_not_executed",
       phase_4b: "operational_protocol_dry_run",
     },
-    would_create_contact: wouldCreateContact,
-    would_update_contact: wouldUpdateContact,
+    would_create_contact: wouldCreateContactFinal,
+    would_update_contact: wouldUpdateContactFinal,
     would_create_task: Boolean(taskPayload),
     would_add_tags: tags,
     would_add_note: note,
@@ -1243,8 +1337,14 @@ async function updateGHLContactCustomFields(config, contactId, customFieldsArray
   };
 }
 
-function shouldCreateTaskLive(intent) {
-  return EVA_TASK_INTENTS.has(intent);
+function shouldCreateTaskLive(contextOrIntent) {
+  if (contextOrIntent && typeof contextOrIntent === "object") {
+    if (contextOrIntent.ghlSyncGovernedByGate === true) {
+      return contextOrIntent.ghlWouldCreateTask === true;
+    }
+    return EVA_TASK_INTENTS.has(contextOrIntent.intent);
+  }
+  return EVA_TASK_INTENTS.has(contextOrIntent);
 }
 
 function buildGHLLiveNote(context, waMode) {
@@ -1306,7 +1406,7 @@ async function syncGHLContactLive(client, config, context) {
     protected_fields: protectedFields,
     would_add_tags: tags,
     would_add_note: noteBody,
-    would_create_task: shouldCreateTaskLive(context.intent),
+    would_create_task: shouldCreateTaskLive(context),
   };
 
   const allowlist = resolveGhlLiveAllowlist(config, context.normalizedPhone);
@@ -1391,7 +1491,7 @@ async function syncGHLContactLive(client, config, context) {
     const noteRaw = await createGHLNote(config, contactId, noteBody);
 
     let taskRaw = null;
-    if (shouldCreateTaskLive(context.intent)) {
+    if (shouldCreateTaskLive(context)) {
       taskRaw = await createGHLTask(config, contactId, {
         title: context.task_title || getTaskTitle(context.intent),
         body: buildGHLLiveTaskDescription(context),
@@ -2496,7 +2596,13 @@ module.exports = async function handler(request) {
     let ghlSync = null;
     if (config.ghlSyncMode === "dry_run" || config.ghlSyncMode === "live") {
       try {
-        ghlSync = await syncGHLContact(client, config, {
+        const ghlAllowlist = resolveGhlLiveAllowlist(config, normalizedPhone || parsed.from || null);
+        const ghlSyncAuth = await resolveGhlSyncAuthorizationForHandler(
+          config,
+          ghlRelevanceShadow,
+          ghlAllowlist
+        );
+        const ghlSyncBaseContext = {
           inboundId,
           normalizedPhone: normalizedPhone || parsed.from || null,
           intent: enrichedDecision.intent,
@@ -2515,7 +2621,25 @@ module.exports = async function handler(request) {
           after_hours_logic_enabled: enrichedDecision.after_hours_logic_enabled,
           task_title: enrichedDecision.task_title,
           task_priority_label: enrichedDecision.task_priority_label,
-        });
+          trafficSource: resolveInboundTrafficSource(parsed, contactContext),
+        };
+
+        if (ghlSyncAuth.shouldSync) {
+          const ghlSyncContext = await enrichGhlSyncContextForHandler(
+            ghlSyncBaseContext,
+            ghlRelevanceShadow,
+            ghlSyncAuth
+          );
+          ghlSync = await syncGHLContact(client, config, ghlSyncContext);
+        } else {
+          ghlSync = await insertGhlPolicyBlockedResult(
+            client,
+            config,
+            ghlSyncBaseContext,
+            ghlRelevanceShadow,
+            ghlSyncAuth
+          );
+        }
         if (ghlSync?.failed) {
           await logWarning(client, {
             normalized_phone: normalizedPhone || null,
@@ -2602,6 +2726,7 @@ module.exports = async function handler(request) {
       ghl_allowlist_enabled: ghlSync?.allowlist_enabled ?? null,
       ghl_allowlist_matched: ghlSync?.allowlist_matched ?? null,
       ghl_block_reason: ghlSync?.block_reason || null,
+      ghl_policy_blocked: ghlSync?.policy_blocked === true,
       ghl_allowed_phones_count: ghlSync?.allowed_phones_count ?? null,
       ghl_contact_id: ghlSync?.ghl_contact_id || null,
       ghl_sync_log_id: ghlSync?.ghl_sync_log_id || null,
@@ -2661,3 +2786,9 @@ handler.resolveGhlLiveAllowlist = resolveGhlLiveAllowlist;
 handler.syncGHLContact = syncGHLContact;
 handler.computeGhlRelevanceShadow = computeGhlRelevanceShadow;
 handler.buildGhlRelevanceConfigFromHandlerConfig = buildGhlRelevanceConfigFromHandlerConfig;
+handler.resolveGhlSyncAuthorizationForHandler = resolveGhlSyncAuthorizationForHandler;
+handler.enrichGhlSyncContextForHandler = enrichGhlSyncContextForHandler;
+handler.insertGhlPolicyBlockedResult = insertGhlPolicyBlockedResult;
+handler.buildGHLDryRunPayload = buildGHLDryRunPayload;
+handler.shouldCreateTaskDryRun = shouldCreateTaskDryRun;
+handler.shouldCreateTaskLive = shouldCreateTaskLive;
