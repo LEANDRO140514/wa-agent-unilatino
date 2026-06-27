@@ -6,8 +6,10 @@ import { extractEntities } from "./entityExtractor.js";
 const ENRICHABLE_WA_INTENTS = new Set([
   "carreras_disponibles",
   "carrera_interes",
+  "carreras_online",
   "beca",
   "ambiguo",
+  "fallback_inteligente",
 ]);
 
 const BLOCKED_WA_INTENTS = new Set([
@@ -18,6 +20,13 @@ const BLOCKED_WA_INTENTS = new Set([
   "no_se_que_estudiar",
   "agradecimiento",
   "despedida",
+  "revalidacion_estudios",
+  "niveles_no_principales",
+  "ubicacion_campus",
+  "rvoe_reconocimiento",
+  "objecion_precio",
+  "promociones_descuentos",
+  "carrera_no_ofertada",
 ]);
 
 /**
@@ -29,12 +38,13 @@ export function shouldEnrichAcademic(waIntent, rawText) {
   if (BLOCKED_WA_INTENTS.has(waIntent)) return false;
 
   if (ENRICHABLE_WA_INTENTS.has(waIntent)) {
-    if (waIntent === "ambiguo") {
+    if (waIntent === "ambiguo" || waIntent === "fallback_inteligente") {
       const normalized = normalizeInput(rawText);
       const entities = extractEntities(normalized);
       const academicIntent = detectAcademicIntent(normalized, entities, {});
       return academicIntent !== "fallback" && academicIntent !== "greeting";
     }
+    if (waIntent === "carreras_online") return true;
     return true;
   }
 

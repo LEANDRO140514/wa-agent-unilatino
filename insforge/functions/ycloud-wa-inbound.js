@@ -8,6 +8,38 @@ const DEFAULT_HEADERS = {
 const NO_TEXT_RESPONSE =
   "Recibí tu mensaje, pero por ahora puedo ayudarte mejor si me escribes tu duda en texto 😊\n\nPuedes decirme, por ejemplo:\n\"Quiero información\"\n\"No sé qué estudiar\"\n\"Quiero una beca\"\n\"Quiero hablar con un asesor\"";
 
+const { applyTypoCorrections } = require("./lib/eva-text-normalizer.js");
+
+const EVA_FALLBACK_INTELIGENTE =
+  "Con gusto te ayudo 😊 ¿Me preguntas por carreras, becas, ubicación, costos, revalidación o quieres hablar con un asesor?";
+
+const EVA_AMBIGUO_MENU =
+  "¡Hola! Soy Eva, asistente de Universidad Latino 😊\n\nCon gusto te ayudo. ¿Qué te gustaría conocer?\n\n1. Carreras disponibles\n2. Becas\n3. Hacer el test vocacional\n4. Hablar con un asesor";
+
+const EVA_REVALIDACION_RESPONSE =
+  "Sí, contamos con proceso de revalidación de materias.\n\nComo cada caso depende de tus estudios previos y documentación académica, un asesor debe revisar tu caso para decirte qué materias podrían revalidarse.\n\n¿Te gustaría que te contacte un asesor?";
+
+const EVA_NIVELES_NO_PRINCIPALES_RESPONSE =
+  "¡Sí! En Universidad Latino también contamos con nivel Preparatoria y Posgrados.\n\nPara darte la información exacta sobre costos, horarios, requisitos y planes de estudio de estos niveles, lo mejor es revisar el programa específico que te interesa.\n\n¿Te gustaría que te conecte con un asesor para darte los detalles?";
+
+const EVA_UBICACION_RESPONSE =
+  "Nuestro Campus Central está en:\n\n📍 Calle 7 Tablaje Catastral 15542 x 4 y 6, Colonia Santa Rita Cholul, Mérida, Yucatán, C.P. 97305.\n\nHorario de atención:\nLunes a viernes: 07:00–21:00\nSábado: 08:00–14:00\n\nTe comparto la ubicación en Google Maps:\nhttps://www.google.com/maps/place/Universidad+Latino/@21.0279469,-89.5695554,17z/data=!3m1!4b1!4m6!3m5!1s0x8f5677ebcce1e48d:0x28be91fcdb813029!8m2!3d21.0279469!4d-89.5695554!16s%2Fg%2F1ptww533r?hl=es-MX&entry=ttu&g_ep=EgoyMDI2MDYyNC4wIKXMDSoASAFQAw%3D%3D";
+
+const EVA_RVOE_GENERAL_RESPONSE =
+  "Sí. Las carreras cuentan con Reconocimiento de Validez Oficial de Estudios, conocido como RVOE, según el programa y modalidad.\n\nSi me dices qué carrera te interesa, puedo compartirte el RVOE correspondiente si está disponible en la información oficial.";
+
+const EVA_OBJECION_PRECIO_RESPONSE =
+  "Entiendo 😊 En Universidad Latino hay apoyos y becas de excelencia según promedio, además de descuentos en inscripción sujetos a validación. Si me dices tu promedio aproximado, te puedo orientar con la tabla general.";
+
+const EVA_PROMOCIONES_RESPONSE =
+  "Puedo orientarte con las becas y descuentos oficiales disponibles. Para promociones vigentes específicas, un asesor puede confirmarte las condiciones actuales. ¿Te gustaría que te contacte?";
+
+const EVA_MEDICINA_NO_OFERTADA_RESPONSE =
+  "Por ahora no tengo Medicina dentro de la oferta oficial disponible. En el área de Salud sí aparecen Psicología, Enfermería y Nutrición. ¿Te gustaría información de alguna de esas carreras?";
+
+const EVA_CARRERAS_ONLINE_PLACEHOLDER =
+  "Déjame revisar las carreras en modalidad En línea disponibles en la información oficial.";
+
 const EVA_CAREER_NAMES = [
   "derecho",
   "psicologia",
@@ -24,7 +56,15 @@ const EVA_CAREER_NAMES = [
   "diseno",
 ];
 
-const EVA_TASK_INTENTS = new Set(["beca", "post_test", "humano", "duda_test"]);
+const EVA_TASK_INTENTS = new Set([
+  "beca",
+  "post_test",
+  "humano",
+  "duda_test",
+  "revalidacion_estudios",
+  "promociones_descuentos",
+  "niveles_no_principales",
+]);
 
 const EVA_AFTER_HOURS_MESSAGE =
   "Gracias por escribirnos 😊 En este momento nuestro equipo de admisiones está fuera de horario, pero tu solicitud quedó registrada y te darán seguimiento en el siguiente horario hábil.";
@@ -41,6 +81,9 @@ const EVA_INTENT_TASK_TITLES = {
   duda_test: "Atender lead WhatsApp — Soporte test vocacional",
   beca: "Atender lead WhatsApp — Interés en beca",
   post_test: "Atender lead WhatsApp — Revisar resultado test",
+  revalidacion_estudios: "Revisar revalidación/equivalencia — lead WhatsApp",
+  promociones_descuentos: "Atender lead WhatsApp — Interés en promoción/beca",
+  niveles_no_principales: "Atender lead WhatsApp — Preparatoria/posgrado",
 };
 
 const EVA_INTENT_OPERATIONAL = {
@@ -48,6 +91,15 @@ const EVA_INTENT_OPERATIONAL = {
   duda_test: { priority: "high", escalation_required: true, task_priority_label: "Alta" },
   beca: { priority: "medium", escalation_required: true, task_priority_label: "Media" },
   post_test: { priority: "medium", escalation_required: true, task_priority_label: "Media" },
+  revalidacion_estudios: { priority: "medium", escalation_required: true, task_priority_label: "Media" },
+  promociones_descuentos: { priority: "medium", escalation_required: true, task_priority_label: "Media" },
+  niveles_no_principales: { priority: "medium", escalation_required: false, task_priority_label: "Media" },
+  objecion_precio: { priority: "medium", escalation_required: false, task_priority_label: "Media" },
+  ubicacion_campus: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
+  rvoe_reconocimiento: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
+  carrera_no_ofertada: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
+  carreras_online: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
+  fallback_inteligente: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
   carrera_interes: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
   carreras_disponibles: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
   no_se_que_estudiar: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
@@ -865,9 +917,11 @@ function resolveGHLCustomFieldsConfig(config) {
 
 const INTENT_TAG_MAP = {
   ambiguo: "wa_interes_info",
+  fallback_inteligente: "wa_interes_info",
   no_se_que_estudiar: "wa_interes_test",
   carrera_interes: "wa_interes_carrera",
   carreras_disponibles: "wa_interes_carreras",
+  carreras_online: "wa_interes_carreras",
   beca: "wa_interes_beca",
   humano: "wa_requiere_asesor",
   duda_test: "wa_duda_test",
@@ -875,7 +929,49 @@ const INTENT_TAG_MAP = {
   sin_texto: "wa_sin_texto",
   agradecimiento: "wa_interes_info",
   despedida: "wa_interes_info",
+  revalidacion_estudios: "wa_revalidacion",
+  niveles_no_principales: "wa_nivel_no_principal",
+  ubicacion_campus: "wa_ubicacion",
+  rvoe_reconocimiento: "wa_rvoe",
+  objecion_precio: "wa_objecion_precio",
+  promociones_descuentos: "wa_interes_promocion",
+  carrera_no_ofertada: "wa_carrera_no_ofertada",
 };
+
+const INTENT_EXTRA_TAGS = {
+  revalidacion_estudios: ["wa_requiere_asesor"],
+  promociones_descuentos: ["wa_interes_beca"],
+  objecion_precio: ["wa_interes_beca"],
+  carrera_no_ofertada: ["wa_salud"],
+};
+
+function getIntentTags(intent, context = {}) {
+  const tags = ["eva-wa", getIntentTag(intent)];
+  const extras = INTENT_EXTRA_TAGS[intent] || [];
+  for (const t of extras) tags.push(t);
+
+  const text = cleanText(context.messageText || "");
+  if (intent === "niveles_no_principales") {
+    if (text.includes("preparatoria") || text.includes("prepa") || text.includes("bachillerato") || text.includes("bachiller")) {
+      tags.push("wa_preparatoria");
+    }
+    if (
+      text.includes("maestria") ||
+      text.includes("posgrado") ||
+      text.includes("doctorado") ||
+      text.includes("especialidad")
+    ) {
+      tags.push("wa_posgrado");
+    }
+  }
+  if (intent === "promociones_descuentos" && context.needsHuman) {
+    tags.push("wa_requiere_asesor");
+  }
+  if (intent === "revalidacion_estudios" && context.needsHuman) {
+    tags.push("wa_requiere_asesor");
+  }
+  return [...new Set(tags)];
+}
 
 const EVA_MENU_OPTION_GROUPS = [
   {
@@ -1006,8 +1102,7 @@ function buildGHLNoteBody(context, modeLabel) {
 }
 
 function buildGHLDryRunPayload(context, existingGhlContactId, customFieldsState) {
-  const tag = getIntentTag(context.intent);
-  const tags = ["eva-wa", tag];
+  const tags = getIntentTags(context.intent, context);
   const governed = context.ghlSyncGovernedByGate === true;
   const wouldCreateContact = governed
     ? context.ghlWouldCreateContact === true && !existingGhlContactId
@@ -1412,7 +1507,7 @@ async function syncGHLContactLive(client, config, context) {
     phase_3c_3b: "field_map_validated",
     phase_3c_4: "custom_fields_put_gated",
   };
-  const tags = ["eva-wa", getIntentTag(context.intent)];
+  const tags = getIntentTags(context.intent, context);
   const noteBody = buildGHLLiveNote(context, config.mode);
   const baseLog = {
     inbound_message_id: context.inboundId || null,
@@ -1723,9 +1818,62 @@ function buildIntentDecision(intent, config, contactContext = {}) {
       needsHuman: false,
       createTask: false,
     },
+    carreras_online: {
+      responseText: EVA_CARRERAS_ONLINE_PLACEHOLDER,
+      waStage: "carreras_online",
+      needsHuman: false,
+      createTask: false,
+    },
+    revalidacion_estudios: {
+      responseText: EVA_REVALIDACION_RESPONSE,
+      waStage: "revalidacion_interes",
+      needsHuman: true,
+      createTask: true,
+    },
+    niveles_no_principales: {
+      responseText: EVA_NIVELES_NO_PRINCIPALES_RESPONSE,
+      waStage: "nivel_no_principal",
+      needsHuman: false,
+      createTask: false,
+    },
+    ubicacion_campus: {
+      responseText: EVA_UBICACION_RESPONSE,
+      waStage: "ubicacion_consultada",
+      needsHuman: false,
+      createTask: false,
+    },
+    rvoe_reconocimiento: {
+      responseText: EVA_RVOE_GENERAL_RESPONSE,
+      waStage: "rvoe_consultado",
+      needsHuman: false,
+      createTask: false,
+    },
+    objecion_precio: {
+      responseText: EVA_OBJECION_PRECIO_RESPONSE,
+      waStage: "objecion_precio",
+      needsHuman: false,
+      createTask: false,
+    },
+    promociones_descuentos: {
+      responseText: EVA_PROMOCIONES_RESPONSE,
+      waStage: "promocion_interes",
+      needsHuman: true,
+      createTask: true,
+    },
+    carrera_no_ofertada: {
+      responseText: EVA_MEDICINA_NO_OFERTADA_RESPONSE,
+      waStage: "carrera_no_ofertada",
+      needsHuman: false,
+      createTask: false,
+    },
+    fallback_inteligente: {
+      responseText: EVA_FALLBACK_INTELIGENTE,
+      waStage: "orientacion",
+      needsHuman: false,
+      createTask: false,
+    },
     ambiguo: {
-      responseText:
-        "¡Hola! Soy Eva, asistente de Universidad Latino 😊\n\nCon gusto te ayudo. ¿Qué te gustaría conocer?\n\n1. Carreras disponibles\n2. Becas\n3. Hacer el test vocacional\n4. Hablar con un asesor",
+      responseText: EVA_AMBIGUO_MENU,
       waStage: "inicio",
       needsHuman: false,
       createTask: false,
@@ -1925,6 +2073,7 @@ function matchesCarreraInteres(text, hasAny) {
 }
 
 function matchesCarrerasDisponibles(text, hasAny) {
+  if (matchesCarrerasOnline(text, hasAny)) return false;
   return hasAny([
     "que carreras tienen",
     "qué carreras tienen",
@@ -1945,6 +2094,152 @@ function matchesCarrerasDisponibles(text, hasAny) {
     "catalogo de carreras",
     "catálogo de carreras",
   ]);
+}
+
+function hasCareerConversationContext(contactContext = {}) {
+  const stage = String(contactContext.wa_stage || "");
+  const lastIntent = String(contactContext.wa_last_intent || "");
+  return (
+    stage === "carrera_interes" ||
+    lastIntent === "carrera_interes" ||
+    stage.includes("carrera") ||
+    lastIntent.includes("carrera")
+  );
+}
+
+function matchesCarreraNoOfertadaMedicina(text, hasAny) {
+  if (hasAny(["medicina", "medicida", "medico cirujano", "medico", "doctor"])) {
+    if (hasAny(["nutricion", "enfermeria", "psicologia"])) return false;
+    return true;
+  }
+  return false;
+}
+
+function matchesRevalidacionEstudios(text, hasAny) {
+  return hasAny([
+    "revalidacion",
+    "revalidar",
+    "convalidacion",
+    "convalidar",
+    "equivalencia",
+    "equivalencias",
+    "materias cursadas",
+    "materias aprobadas",
+    "traslado de escuela",
+    "cambio de universidad",
+    "vengo de otra universidad",
+    "ya estudie",
+    "certificado parcial",
+    "kardex",
+    "constancia de estudios",
+  ]);
+}
+
+function matchesNivelesNoPrincipales(text, hasAny) {
+  return hasAny([
+    "preparatoria",
+    "prepa",
+    "bachillerato",
+    "bachiller",
+    "maestria",
+    "posgrado",
+    "postgrado",
+    "doctorado",
+    "especialidad",
+  ]);
+}
+
+function matchesUbicacionCampus(text, hasAny) {
+  return hasAny([
+    "ubicacion",
+    "donde estan",
+    "direccion",
+    "campus",
+    "localizacion",
+    "sede",
+    "como llegar",
+    "unicacion",
+    "ubicasion",
+  ]);
+}
+
+function matchesRvoeReconocimiento(text, hasAny) {
+  return hasAny([
+    "reconocimiento oficial",
+    "reconocida",
+    "reconocido",
+    "acreditada",
+    "acreditado",
+    "acreditacion",
+    "validez oficial",
+    "rvoe",
+    " sep",
+  ]);
+}
+
+function matchesObjecionPrecio(text, hasAny, contactContext = {}) {
+  const priceObjection = hasAny([
+    "esta caro",
+    "está caro",
+    "se me hace caro",
+    "es mucho",
+    "no tengo dinero",
+    "no me alcanza",
+    "muy caro",
+    "costoso",
+  ]);
+  const shortObjection =
+    (text.includes("caro") || text.includes("cara")) &&
+    (text.length <= 40 || hasCareerConversationContext(contactContext));
+  return priceObjection || shortObjection;
+}
+
+function matchesPromocionesDescuentos(text, hasAny) {
+  return hasAny([
+    "promocion",
+    "promociones",
+    " promo",
+    "ofertas",
+    "descuento vigente",
+    "que promociones tienen",
+    "qué promociones tienen",
+    "que promocion tienen",
+    "qué promoción tienen",
+  ]);
+}
+
+function matchesCarrerasOnline(text, hasAny) {
+  return hasAny([
+    "carreras online",
+    "carreras en linea",
+    "carreras virtuales",
+    "licenciaturas online",
+    "licenciaturas en linea",
+    "que carreras online",
+    "qué carreras online",
+    "carrera online",
+    "carrera en linea",
+  ]);
+}
+
+function matchesVagueGreeting(text, hasAny) {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const wordCount = trimmed.split(/\s+/).length;
+  if (wordCount > 6) return false;
+  return hasAny([
+    "hola",
+    "buenas",
+    "buen dia",
+    "buenas tardes",
+    "buenas noches",
+    "que tal",
+    "hey",
+    "info",
+    "informacion",
+    "quiero informacion",
+    "quiero info",
+  ]) || trimmed === "me interesa";
 }
 
 function normalizeMenuInput(rawText) {
@@ -1997,7 +2292,8 @@ function classifyIntent(rawText, config, contactContext = {}) {
     return returnIntent("sin_texto", config, null, contactContext);
   }
 
-  const text = cleanText(rawText);
+  const corrected = applyTypoCorrections(rawText);
+  const text = cleanText(corrected);
   const hasAny = (arr) => arr.some((t) => text.includes(cleanText(t)));
 
   if (matchesDudaTest(text, hasAny)) {
@@ -2012,12 +2308,44 @@ function classifyIntent(rawText, config, contactContext = {}) {
     return returnIntent("humano", config, null, contactContext);
   }
 
+  if (matchesCarreraNoOfertadaMedicina(text, hasAny)) {
+    return returnIntent("carrera_no_ofertada", config, null, contactContext);
+  }
+
+  if (matchesRevalidacionEstudios(text, hasAny)) {
+    return returnIntent("revalidacion_estudios", config, null, contactContext);
+  }
+
+  if (matchesNivelesNoPrincipales(text, hasAny)) {
+    return returnIntent("niveles_no_principales", config, null, contactContext);
+  }
+
+  if (matchesUbicacionCampus(text, hasAny)) {
+    return returnIntent("ubicacion_campus", config, null, contactContext);
+  }
+
+  if (matchesRvoeReconocimiento(text, hasAny)) {
+    return returnIntent("rvoe_reconocimiento", config, null, contactContext);
+  }
+
+  if (matchesObjecionPrecio(text, hasAny, contactContext)) {
+    return returnIntent("objecion_precio", config, null, contactContext);
+  }
+
+  if (matchesPromocionesDescuentos(text, hasAny)) {
+    return returnIntent("promociones_descuentos", config, null, contactContext);
+  }
+
   if (matchesBeca(text, hasAny)) {
     return returnIntent("beca", config, null, contactContext);
   }
 
   if (matchesNoSeQueEstudiar(text, hasAny)) {
     return returnIntent("no_se_que_estudiar", config, null, contactContext);
+  }
+
+  if (matchesCarrerasOnline(text, hasAny)) {
+    return returnIntent("carreras_online", config, null, contactContext);
   }
 
   if (matchesCarrerasDisponibles(text, hasAny)) {
@@ -2041,7 +2369,11 @@ function classifyIntent(rawText, config, contactContext = {}) {
     return returnIntent("despedida", config, null, contactContext);
   }
 
-  return returnIntent("ambiguo", config, null, contactContext);
+  if (matchesVagueGreeting(text, hasAny)) {
+    return returnIntent("ambiguo", config, null, contactContext);
+  }
+
+  return returnIntent("fallback_inteligente", config, null, contactContext);
 }
 
 let _academicEngineModules = null;
@@ -2809,3 +3141,4 @@ handler.buildGHLDryRunPayload = buildGHLDryRunPayload;
 handler.shouldCreateTaskDryRun = shouldCreateTaskDryRun;
 handler.shouldCreateTaskLive = shouldCreateTaskLive;
 handler.resolveGhlTaskTitle = resolveGhlTaskTitle;
+handler.getIntentTags = getIntentTags;

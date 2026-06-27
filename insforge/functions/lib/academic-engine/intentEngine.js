@@ -60,6 +60,10 @@ export function detectAcademicIntent(normalizedInput, entities, _state = {}) {
 
   if (entities.modality) return "modality_filter";
 
+  if (n.includes("carreras online") || n.includes("carreras en linea") || n.includes("carreras virtuales")) {
+    return "modality_filter";
+  }
+
   if (CATALOG_COUNT_KEYWORDS.some((k) => n.includes(k))) return "career_list";
 
   if (CAREER_LIST_KEYWORDS.some((k) => n.includes(k))) return "career_list";
