@@ -14,6 +14,11 @@ const {
   redactCagShadowLog,
   maybeLogCagShadow,
 } = require("./lib/knowledge/cagShadowLogging.js");
+const {
+  isCagAssistiveShadowComparisonEnabled,
+  redactCagAssistiveComparisonLog,
+  maybeLogCagAssistiveComparison,
+} = require("./lib/knowledge/cagAssistiveShadowComparison.js");
 
 const EVA_FALLBACK_INTELIGENTE =
   "Con gusto te ayudo 😊 ¿Me preguntas por carreras, becas, ubicación, costos, revalidación o quieres hablar con un asesor?";
@@ -181,6 +186,7 @@ function getConfig() {
     ghlSyncPolicy: Deno.env.get("GHL_SYNC_POLICY") || "none",
     ghlLeadScoreThreshold: Number(Deno.env.get("GHL_LEAD_SCORE_THRESHOLD") || "45"),
     evaCagShadowLogging: Deno.env.get("EVA_CAG_SHADOW_LOGGING") === "true",
+    evaCagAssistiveShadow: Deno.env.get("EVA_CAG_ASSISTIVE_SHADOW") === "true",
     ghlMetaAdsLeadScoreThreshold: Number(
       Deno.env.get("GHL_META_ADS_LEAD_SCORE_THRESHOLD") || "50"
     ),
@@ -2857,6 +2863,21 @@ module.exports = async function handler(request) {
       );
     }
 
+    try {
+      maybeLogCagAssistiveComparison({
+        config,
+        messageText: parsed.message_text,
+        deterministicIntent: enrichedDecision.intent,
+        deterministicResponse: enrichedDecision.responseText,
+        contactContext,
+      });
+    } catch (cagAssistiveErr) {
+      console.warn(
+        "[eva_cag_assistive_shadow_error]",
+        String(cagAssistiveErr?.message || "cag_assistive_shadow_failed").slice(0, 200),
+      );
+    }
+
     if (config.evaLlmEnabled && enrichedDecision.llm_meta && inboundId) {
       await logLlmShadowEntry(client, {
         inbound_message_id: inboundId,
@@ -3166,3 +3187,6 @@ handler.getIntentTags = getIntentTags;
 handler.isCagShadowLoggingEnabled = isCagShadowLoggingEnabled;
 handler.redactCagShadowLog = redactCagShadowLog;
 handler.maybeLogCagShadow = maybeLogCagShadow;
+handler.isCagAssistiveShadowComparisonEnabled = isCagAssistiveShadowComparisonEnabled;
+handler.redactCagAssistiveComparisonLog = redactCagAssistiveComparisonLog;
+handler.maybeLogCagAssistiveComparison = maybeLogCagAssistiveComparison;
