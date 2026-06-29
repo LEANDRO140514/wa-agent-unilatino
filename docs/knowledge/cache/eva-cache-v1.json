@@ -1,0 +1,51 @@
+{
+  "tenantId": "universidad-latino",
+  "verticalId": "eva-wa-unilatino",
+  "knowledgeVersion": "eva-unilatino-cag-v1",
+  "generatedAt": "2026-06-29T08:35:00.547Z",
+  "contentHash": "bd550d5f4e5175c21909488c439ca6d57a965dde105f63aca665eca37785ef39",
+  "tokenEstimate": 1978,
+  "sourceFiles": [
+    {
+      "id": "programas",
+      "path": "docs/knowledge/static/programas.md",
+      "category": "academic_programs"
+    },
+    {
+      "id": "admisiones",
+      "path": "docs/knowledge/static/admisiones.md",
+      "category": "admissions"
+    },
+    {
+      "id": "becas",
+      "path": "docs/knowledge/static/becas.md",
+      "category": "scholarships"
+    },
+    {
+      "id": "rvoe",
+      "path": "docs/knowledge/static/rvoe.md",
+      "category": "official_recognition"
+    },
+    {
+      "id": "ubicacion",
+      "path": "docs/knowledge/static/ubicacion.md",
+      "category": "location"
+    },
+    {
+      "id": "revalidacion",
+      "path": "docs/knowledge/static/revalidacion.md",
+      "category": "revalidation"
+    },
+    {
+      "id": "preparatoria-posgrados",
+      "path": "docs/knowledge/static/preparatoria-posgrados.md",
+      "category": "non_primary_levels"
+    },
+    {
+      "id": "faqs",
+      "path": "docs/knowledge/static/faqs.md",
+      "category": "faqs"
+    }
+  ],
+  "context": "# [programas] academic_programs\n\n# Programas académicos — Universidad Latino (Eva WA)\n\n**Fuente:** source-of-truth académico validado en repo (`insforge/functions/lib/academic-engine/source-of-truth.js`).\n\n## Catálogo\n\nUniversidad Latino reporta **9 programas académicos únicos** en **12 combinaciones** de carrera y modalidad.\n\n## Modalidades\n\n- Presencial\n- En línea\n- Sabatina\n\n## Referencia de costos (validados)\n\n| Modalidad | Mensualidad referencia | Inscripción referencia |\n|-----------|------------------------|------------------------|\n| Presencial | $4,650/mes | $8,000 |\n| En línea | $1,980/mes | $3,600 |\n| Sabatina | $3,960/mes | $3,600 |\n\nNo inventar costos por carrera/modalidad si no están listados abajo.\n\n## Programas oficiales (lista Eva WA)\n\n- Derecho — Presencial\n- Derecho Online — En línea\n- Psicología — Presencial\n- Enfermería — Presencial\n- Nutrición — Presencial\n- Ingeniería en Sistemas Computacionales — Presencial\n- Administración Sabatina — Sabatina\n- Administración y Desarrollo Empresarial Online — En línea\n- Ventas y Mercadotecnia — Presencial\n- Ventas y Mercadotecnia Online — En línea\n- Negocios Internacionales — Presencial\n- Gastronomía — Presencial\n\n## Carreras en línea (oficial)\n\n- Derecho Online — $1,980/mes | Inscripción $3,600\n- Administración y Desarrollo Empresarial Online — $1,980/mes | Inscripción $3,600\n- Ventas y Mercadotecnia Online — $1,980/mes | Inscripción $3,600\n\n## Detalle validado: Negocios Internacionales\n\n- Modalidad: Presencial\n- Duración: 3 años 4 meses\n- Mensualidad: $4,650\n- Inscripción: $8,000\n- Campus: Campus Central\n- RVOE: 809\n- Seguro de estudiante (adicional): $400/año\n- Prácticas profesionales garantizadas (institucional)\n\n## Carrera no ofertada\n\n**Medicina** no está dentro de la oferta oficial disponible en Eva WA.\n\nAlternativas en Salud:\n\n- Psicología\n- Enfermería\n- Nutrición\n\n---\n\n# [admisiones] admissions\n\n# Admisiones — Universidad Latino\n\n**Fuente:** source-of-truth validado (`proceso_admision.csv`, `documentos_inscripcion.csv`, `contacto_institucional.csv`).\n\n## Proceso de admisión\n\n1. **Orientación** — Orientación sobre la carrera de interés.\n2. **Revisión documental** — Revisión de requisitos y documentación.\n3. **Formato de inscripción** — Llenado del formato de inscripción.\n4. **Elección de pago** — Elección del tipo de pago (anual o por periodo).\n5. **Pago y entrega** — Realización del pago y entrega de documentos.\n\n**No se requiere examen de admisión** (validado en políticas institucionales).\n\n## Documentos para inscripción\n\n1. Acta de nacimiento\n2. Certificado de bachillerato (original y copia) — se puede iniciar con constancia si el certificado está en trámite; entregar antes de iniciar clases en septiembre\n3. CURP\n4. Comprobante de domicilio (copia)\n\n## Formas de pago documentadas\n\n- Pago en mensualidades (disponible)\n- Pago anual con descuento — `PENDIENTE_VALIDACION_ADMISIONES` (monto)\n- Pago semestral con descuento — `PENDIENTE_VALIDACION_ADMISIONES` (monto)\n\n## Contacto admisiones\n\n- **Área:** Departamento de Admisiones\n- **Dirección:** Calle 7 Tablaje Catastral 15542 x 4 y 6, Colonia Santa Rita Cholul, Mérida, Yucatán, C.P. 97305\n- **Teléfono:** 999-943-5386 (extensiones 201, 204, 206)\n- **Email:** informes@universidadlatino.edu.mx\n- **WhatsApp oficial:** +52 999 453 8421\n- **Web:** https://www.universidadlatino.edu.mx\n- **Horario:** Lunes a viernes 07:00–21:00 · Sábado 08:00–14:00\n\n## Reglas Eva WA\n\n- Responder con datos oficiales cuando estén en este pack.\n- Casos personalizados o montos pendientes → asesor humano.\n\n---\n\n# [becas] scholarships\n\n# Becas y descuentos — Universidad Latino\n\n## Becas de excelencia por promedio de bachillerato\n\n- **Sobresaliente (9.6–10):** 50% en colegiaturas y 50% de descuento en inscripción.\n- **Muy alto (9–9.59):** 40% en colegiaturas y 50% de descuento en inscripción.\n- **Alto (8.5–8.99):** 30% en colegiaturas y 50% de descuento en inscripción.\n- **Base (7–8.49):** sin beca en colegiaturas y 50% de descuento en inscripción.\n- **Menor a 7.00:** sin beca automática — un asesor puede revisar alternativas.\n\n**Sujeto a validación del área de admisiones.**\n\n## Reglas Eva WA\n\n- No prometer beca definitiva.\n- No inventar promociones vigentes.\n- Si preguntan por promoción vigente específica y no está documentada, escalar a asesor.\n\n---\n\n# [rvoe] official_recognition\n\n# RVOE y reconocimiento oficial\n\nLas carreras cuentan con **Reconocimiento de Validez Oficial de Estudios (RVOE)**, según el programa y modalidad.\n\nSi el usuario menciona una carrera y el RVOE está disponible en la información oficial, Eva puede compartirlo.\n\n## Dato validado\n\n- **Negocios Internacionales:** RVOE 809\n\n## Reglas Eva WA\n\n- No inventar RVOE.\n- No afirmar acreditaciones no documentadas.\n- Si pide documento oficial, validación legal o RVOE no disponible en source-of-truth, escalar a asesor.\n\n---\n\n# [ubicacion] location\n\n# Ubicación — Campus Central Universidad Latino\n\nNuestro Campus Central está en:\n\n📍 Calle 7 Tablaje Catastral 15542 x 4 y 6, Colonia Santa Rita Cholul, Mérida, Yucatán, C.P. 97305.\n\nHorario de atención:\nLunes a viernes: 07:00–21:00\nSábado: 08:00–14:00\n\nTe comparto la ubicación en Google Maps:\nhttps://www.google.com/maps/place/Universidad+Latino/@21.0279469,-89.5695554,17z/data=!3m1!4b1!4m6!3m5!1s0x8f5677ebcce1e48d:0x28be91fcdb813029!8m2!3d21.0279469!4d-89.5695554!16s%2Fg%2F1ptww533r?hl=es-MX&entry=ttu&g_ep=EgoyMDI2MDYyNC4wIKXMDSoASAFQAw%3D%3D\n\n## Reglas Eva WA (ubicación)\n\n- Eva responde ubicación directamente.\n- Eva **NO** ofrece asesor en ubicación.\n- Eva **NO** ofrece visita en ubicación.\n- Eva **NO** crea task por ubicación.\n- Eva **NO** marca `wa_requiere_asesor` por ubicación.\n- Solo tag `wa_ubicacion`.\n\n---\n\n# [revalidacion] revalidation\n\n# Revalidación de estudios\n\nSí, Universidad Latino cuenta con **proceso de revalidación de materias**.\n\nComo cada caso depende de los estudios previos y documentación académica, un asesor académico debe revisar el caso para decir qué materias podrían revalidarse.\n\n## Reglas Eva WA\n\n- Eva sí responde la información general.\n- Eva **no** promete cuántas materias se revalidan.\n- Eva **no** resuelve equivalencias específicas.\n- Si el usuario quiere revisar su caso, se requiere asesor.\n\n---\n\n# [preparatoria-posgrados] non_primary_levels\n\n# Preparatoria y posgrados\n\nUniversidad Latino también cuenta con nivel **Preparatoria** y **Posgrados**.\n\n## Reglas Eva WA\n\n- Eva puede responder que existen esos niveles (validado institucionalmente en conversación piloto).\n- No inventar costos, horarios, requisitos ni planes de estudio si no están documentados en source-of-truth.\n- Para detalles específicos de estos niveles: asesor o `PENDIENTE_VALIDACION_ADMISIONES`.\n\n---\n\n# [faqs] faqs\n\n# FAQs conversacionales autorizadas — Eva WA\n\nTemas cubiertos por knowledge pack estático (CAG):\n\n- Carreras disponibles\n- Carreras online\n- Becas\n- Descuentos generales (tabla becas)\n- Promociones (orientar becas; vigentes específicas → asesor)\n- Objeción de precio (becas/apoyos)\n- Revalidación (general)\n- Ubicación (sin asesor ni visita)\n- RVOE / reconocimiento oficial\n- Preparatoria / posgrados (existencia; detalle → asesor)\n- Medicina / carrera no ofertada\n- Test vocacional: https://testunilatino.algorithmus.io/\n- Hablar con asesor (escalamiento humano)\n- Cierre de conversación (gracias / despedida)\n\n## Menú de bienvenida\n\nEl menú numerado (1–4) **solo** se usa en saludo inicial o mensaje muy vago (`hola`, `info`, `quiero información`).\n\n**No repetir menú** cuando el usuario hace pregunta concreta.\n\n## Fallback inteligente\n\nSi no se entiende la intención:\n\n> Con gusto te ayudo 😊 ¿Me preguntas por carreras, becas, ubicación, costos, revalidación o quieres hablar con un asesor?\n\n## Escalamiento\n\n> Esa es una excelente pregunta. Para darte la información más precisa, te voy a conectar con un asesor académico.\n\nSolo cuando no hay dato confiable en source-of-truth."
+}

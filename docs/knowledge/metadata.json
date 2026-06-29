@@ -1,0 +1,67 @@
+{
+  "tenantId": "universidad-latino",
+  "verticalId": "eva-wa-unilatino",
+  "knowledgeVersion": "eva-unilatino-cag-v1",
+  "status": "draft",
+  "sourcePolicy": "deterministic-first",
+  "llmAllowed": false,
+  "ragEnabled": false,
+  "cagEnabled": true,
+  "lastUpdated": "2026-06-27T12:00:00.000Z",
+  "staticDocuments": [
+    {
+      "id": "programas",
+      "path": "docs/knowledge/static/programas.md",
+      "category": "academic_programs",
+      "cagEligible": true
+    },
+    {
+      "id": "admisiones",
+      "path": "docs/knowledge/static/admisiones.md",
+      "category": "admissions",
+      "cagEligible": true
+    },
+    {
+      "id": "becas",
+      "path": "docs/knowledge/static/becas.md",
+      "category": "scholarships",
+      "cagEligible": true
+    },
+    {
+      "id": "rvoe",
+      "path": "docs/knowledge/static/rvoe.md",
+      "category": "official_recognition",
+      "cagEligible": true
+    },
+    {
+      "id": "ubicacion",
+      "path": "docs/knowledge/static/ubicacion.md",
+      "category": "location",
+      "cagEligible": true
+    },
+    {
+      "id": "revalidacion",
+      "path": "docs/knowledge/static/revalidacion.md",
+      "category": "revalidation",
+      "cagEligible": true
+    },
+    {
+      "id": "preparatoria-posgrados",
+      "path": "docs/knowledge/static/preparatoria-posgrados.md",
+      "category": "non_primary_levels",
+      "cagEligible": true
+    },
+    {
+      "id": "faqs",
+      "path": "docs/knowledge/static/faqs.md",
+      "category": "faqs",
+      "cagEligible": true
+    }
+  ],
+  "dynamicDocuments": [],
+  "validation": {
+    "requiresAdmissionsApproval": true,
+    "approvedBy": null,
+    "approvedAt": null
+  }
+}
