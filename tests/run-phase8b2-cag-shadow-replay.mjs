@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Phase 8B.2 — CAG shadow replay (pilot conversation + knowledge evaluation).
+ * Phase 8B.2/8B.3 — CAG shadow replay (pilot conversation + knowledge evaluation).
  * Does NOT modify deterministic responses or send CAG to users.
  * Usage: node tests/run-phase8b2-cag-shadow-replay.mjs
  */
@@ -39,87 +39,100 @@ const STEPS = [
     n: 1,
     text: "Tienen revalidación de estudios?",
     expectCag: "CAG",
-    expectRecommendation: "useful",
+    expectCategory: "revalidation_general",
+    expectRecommendation: "useful_with_human_followup",
   },
   {
     n: 2,
     text: "tienen maestrias?",
     expectCag: "CAG",
+    expectCategory: "non_primary_levels",
     expectRecommendation: "useful",
   },
   {
     n: 3,
     text: "veo que tienen preparatoria",
     expectCag: "CAG",
+    expectCategory: "non_primary_levels",
     expectRecommendation: "useful",
   },
   {
     n: 4,
     text: "me gusta negocios internacionales, pero tengo dudas",
     expectCag: "CAG",
+    expectCategory: "programs",
     expectRecommendation: "useful",
     enrich: true,
   },
   {
     n: 5,
     text: "esta cara no?",
-    expectCag: "NONE",
-    expectRecommendation: "not_needed",
+    expectCag: "CAG",
+    expectCategory: "price_objection",
+    expectRecommendation: "useful",
   },
   {
     n: 6,
     text: "tienen descuento?",
     expectCag: "CAG",
+    expectCategory: "scholarships",
     expectRecommendation: "useful",
     enrich: true,
   },
   {
     n: 7,
     text: "en que unicacion estan?",
-    expectCag: "NONE",
-    expectRecommendation: "not_needed",
-    note: "router typo gap; deterministic normalizer handles ubicacion",
+    expectCag: "CAG",
+    expectCategory: "location",
+    expectRecommendation: "useful",
   },
   {
     n: 8,
     text: "Ubicacion?",
     expectCag: "CAG",
+    expectCategory: "location",
     expectRecommendation: "useful",
   },
   {
     n: 9,
     text: "la Universidad reconocida y acreditada en México?",
     expectCag: "CAG",
+    expectCategory: "rvoe",
     expectRecommendation: "useful",
   },
   {
     n: 10,
     text: "tienen reconocimiento oficial?",
     expectCag: "CAG",
+    expectCategory: "rvoe",
     expectRecommendation: "useful",
   },
   {
     n: 11,
     text: "hola",
     expectCag: "NONE",
-    expectRecommendation: "not_needed",
+    expectCategory: "unknown_or_greeting",
+    expectRecommendation: "not_applicable",
   },
   {
     n: 12,
     text: "tienen reconocimiento oficial?",
     expectCag: "CAG",
+    expectCategory: "rvoe",
     expectRecommendation: "useful",
   },
   {
     n: 13,
     text: "que promociones tienen?",
-    expectCag: "NONE",
-    expectRecommendation: "requires_human",
+    expectCag: "CAG",
+    expectCategory: "promotions_general",
+    expectRecommendation: "useful_with_human_followup",
   },
   {
     n: 14,
     text: "carreras online?",
     expectCag: "CAG",
+    expectCategory: "online_programs",
     expectRecommendation: "useful",
     enrich: true,
   },
@@ -127,6 +140,7 @@ const STEPS = [
     n: 15,
     text: "medicida tienen?",
     expectCag: "CAG",
+    expectCategory: "not_offered",
     expectRecommendation: "useful",
   },
 ];
@@ -155,8 +169,8 @@ let fail = 0;
 const results = [];
 let contactContext = {};
 
-console.log("8B.2 — CAG shadow replay (pilot conversation, sequential)\n");
-console.log(`Base commit: 4132fdb | mode=${config.mode} ghl=${config.ghlSyncMode} llm=off\n`);
+console.log("8B.2/8B.3 — CAG shadow replay (pilot conversation, sequential)\n");
+console.log(`Base commit: efbc1af | mode=${config.mode} ghl=${config.ghlSyncMode} llm=off\n`);
 
 for (const step of STEPS) {
   const issues = [];
@@ -192,6 +206,9 @@ for (const step of STEPS) {
   if (step.expectCag === "CAG" && !shadow.contextPreview) {
     warns.push("empty_contextPreview");
   }
+  if (step.expectCategory && shadow.knowledgeCategory !== step.expectCategory) {
+    issues.push(`category=${shadow.knowledgeCategory} expected=${step.expectCategory}`);
+  }
   if (shadow.knowledgeVersion && shadow.knowledgeVersion !== "eva-unilatino-cag-v1") {
     issues.push(`knowledgeVersion=${shadow.knowledgeVersion}`);
   }
@@ -224,6 +241,9 @@ for (const step of STEPS) {
     shadow: {
       knowledgeMode: shadow.knowledgeMode,
       knowledgeSource: shadow.knowledgeSource,
+      knowledgeCategory: shadow.knowledgeCategory,
+      knowledgeReason: shadow.knowledgeReason,
+      normalizedQuery: shadow.normalizedQuery,
       knowledgeVersion: shadow.knowledgeVersion,
       recommendation: shadow.recommendation,
       cagUseful: shadow.cagUseful,
@@ -244,8 +264,9 @@ const cagUsefulCount = results.filter((r) => r.shadow.cagUseful).length;
 const cagNoneCount = results.filter((r) => r.shadow.knowledgeMode === "NONE").length;
 
 const summary = {
-  phase: "8B.2",
-  base_commit: "4132fdb20f637fac2b281f027e7fbceb763da61d",
+  phase: "8B.3",
+  base_commit: "efbc1af4ac9a3afc90c1ed2d187bb29196537a8d",
+  prior_cag_useful_8b2: "11/15",
   mode: config.mode,
   ghl_sync_mode: config.ghlSyncMode,
   eva_llm_enabled: false,

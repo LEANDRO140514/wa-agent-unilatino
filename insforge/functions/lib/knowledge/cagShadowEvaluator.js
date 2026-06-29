@@ -1,7 +1,7 @@
 /**
- * Eva WA — CAG shadow evaluator (8B.2).
+ * Eva WA — CAG shadow evaluator (8B.2, 8B.3 router alignment).
  * Compares deterministic Eva output vs CAG availability without changing user-facing responses.
- * RAG mode is intentionally disabled in 8B.2.
+ * RAG mode is intentionally disabled in 8B.3.
  * Does not call LLM, external APIs, or InsForge.
  */
 
@@ -10,52 +10,36 @@ const { getKnowledgeContext } = require("./getKnowledgeContext");
 const PREVIEW_MAX = 220;
 const CONTEXT_PREVIEW_MAX = 280;
 
-const HUMAN_ESCALATION_INTENTS = new Set([
-  "revalidacion_estudios",
-  "promociones_descuentos",
-  "hablar_asesor",
-  "documentos_admision",
-]);
-
-const CAG_ALIGNED_INTENTS = new Set([
-  "revalidacion_estudios",
-  "niveles_no_principales",
-  "ubicacion_campus",
-  "rvoe_reconocimiento",
-  "carreras_online",
-  "carrera_no_ofertada",
-  "objecion_precio",
-  "beca",
-  "promociones_descuentos",
-  "carrera_interes",
-  "costos",
-  "programas",
-  "admision",
-]);
+const CATEGORY_CONTEXT_HINTS = {
+  location: ["Santa Rita Cholul", "ubicacion"],
+  price_objection: ["becas", "Becas de excelencia"],
+  scholarships: ["becas", "Becas de excelencia"],
+  promotions_general: ["becas", "Becas de excelencia"],
+  revalidation_general: ["revalidacion"],
+  rvoe: ["RVOE"],
+  online_programs: ["En línea", "online"],
+  not_offered: ["Medicina", "Psicología"],
+  non_primary_levels: ["Preparatoria", "preparatoria-posgrados"],
+  programs: ["Negocios Internacionales", "programas"],
+  faqs: ["Universidad Latino"],
+};
 
 function summarize(text, max = PREVIEW_MAX) {
   const one = String(text || "").replace(/\s+/g, " ").trim();
   return one.length > max ? `${one.slice(0, max)}…` : one;
 }
 
-function extractContextSnippet(context, message, intent) {
+function extractContextSnippet(context, category, message, intent) {
   if (!context) return "";
-  const hints = [];
+  const hints = [...(CATEGORY_CONTEXT_HINTS[category] || [])];
   const n = String(message || "").toLowerCase();
-  if (/revalid/i.test(n) || intent === "revalidacion_estudios") hints.push("revalidacion");
-  if (/maestri|posgrad|preparatoria|prepa/i.test(n) || intent === "niveles_no_principales") {
-    hints.push("preparatoria-posgrados", "Preparatoria");
-  }
   if (/negocios|duda/i.test(n)) hints.push("Negocios Internacionales");
-  if (/descuento|beca|cara|precio/i.test(n) || intent === "objecion_precio" || intent === "beca") {
-    hints.push("becas", "Becas de excelencia");
-  }
   if (/ubic|unicac|campus|donde/i.test(n) || intent === "ubicacion_campus") {
-    hints.push("Santa Rita Cholul", "ubicacion");
+    hints.push("Santa Rita Cholul");
   }
-  if (/rvoe|reconoc|acredit/i.test(n) || intent === "rvoe_reconocimiento") hints.push("RVOE");
-  if (/online|linea|línea/i.test(n) || intent === "carreras_online") hints.push("En línea", "online");
-  if (/medic/i.test(n) || intent === "carrera_no_ofertada") hints.push("Medicina", "Psicología");
+  if (/descuento|beca|cara|precio/i.test(n) || intent === "objecion_precio" || intent === "beca") {
+    hints.push("Becas de excelencia");
+  }
 
   for (const hint of hints) {
     const idx = context.indexOf(hint);
@@ -68,59 +52,67 @@ function extractContextSnippet(context, message, intent) {
   return summarize(context, CONTEXT_PREVIEW_MAX);
 }
 
-function deriveRecommendation({
-  knowledge,
-  deterministicIntent,
-  deterministicResponse,
-  message,
-}) {
+function deriveRecommendation({ knowledge, deterministicIntent }) {
   const notes = [];
+  const category = knowledge.category;
 
   if (knowledge.source === "missing_cache") {
     return { recommendation: "missing_cache", notes: ["CAG cache file not found"] };
   }
 
   if (knowledge.mode === "CAG") {
-    if (HUMAN_ESCALATION_INTENTS.has(deterministicIntent)) {
-      notes.push("CAG provides general static context; deterministic flow still escalates human when needed");
-      return { recommendation: "useful", notes };
+    switch (category) {
+      case "location":
+        notes.push("CAG confirms static location knowledge");
+        return { recommendation: "useful", notes };
+      case "price_objection":
+        notes.push("CAG provides scholarship/price support context");
+        return { recommendation: "useful", notes };
+      case "promotions_general":
+        notes.push(
+          "CAG can provide official scholarships, but current promotions require validation",
+        );
+        return { recommendation: "useful_with_human_followup", notes };
+      case "revalidation_general":
+        if (deterministicIntent === "revalidacion_estudios") {
+          notes.push(
+            "CAG provides general revalidation policy; deterministic flow still escalates human when needed",
+          );
+          return { recommendation: "useful_with_human_followup", notes };
+        }
+        notes.push("General revalidation knowledge available in CAG");
+        return { recommendation: "useful", notes };
+      case "scholarships":
+        notes.push("Static scholarship table aligns with deterministic becas intent");
+        return { recommendation: "useful", notes };
+      default:
+        notes.push(`Static CAG context available for category ${category}`);
+        return { recommendation: "useful", notes };
     }
-    if (CAG_ALIGNED_INTENTS.has(deterministicIntent) || deterministicIntent === "fallback_inteligente") {
-      notes.push("Static CAG context aligns with deterministic institutional intent");
-      return { recommendation: "useful", notes };
-    }
-    if (deterministicIntent === "ambiguo") {
-      notes.push("CAG available but greeting uses menu; CAG not injected in shadow");
-      return { recommendation: "not_needed", notes };
-    }
-    notes.push("CAG available; verify alignment in future integration");
-    return { recommendation: "useful", notes };
   }
 
-  // knowledge.mode === NONE
   if (knowledge.source === "not_cag_suitable") {
-    if (HUMAN_ESCALATION_INTENTS.has(deterministicIntent)) {
-      notes.push("Router correctly avoids static CAG for dynamic or human-required topic");
+    if (category === "dynamic") {
+      notes.push("Dynamic or time-bound promotion/availability query");
+      return { recommendation: "requires_dynamic", notes };
+    }
+    if (category === "personalized") {
+      notes.push("Personalized academic review required");
       return { recommendation: "requires_human", notes };
     }
-    if (/unicac/i.test(message) && deterministicIntent === "ubicacion_campus") {
-      notes.push("CAG router missed ubicacion typo; deterministic normalizer still resolves intent");
-      return { recommendation: "not_needed", notes };
-    }
-    if (deterministicIntent === "objecion_precio") {
-      notes.push("CAG router missed price objection phrasing; deterministic response already covers becas");
-      return { recommendation: "not_needed", notes };
+    if (
+      category === "unknown_or_greeting" ||
+      (category === "unknown" && knowledge.reason === "greeting_or_vague_opener_handled_by_menu")
+    ) {
+      notes.push("Greeting or vague opener; deterministic menu handles response");
+      return { recommendation: "not_applicable", notes };
     }
     if (deterministicIntent === "ambiguo") {
-      notes.push("Greeting or vague opener; menu response sufficient without CAG");
-      return { recommendation: "not_needed", notes };
+      notes.push("Greeting handled by menu without CAG");
+      return { recommendation: "not_applicable", notes };
     }
-    if (deterministicResponse && deterministicResponse.length > 0) {
-      notes.push("Deterministic response already produced; CAG not required in shadow");
-      return { recommendation: "not_needed", notes };
-    }
-    notes.push("Query flagged as not CAG-suitable");
-    return { recommendation: "requires_dynamic", notes };
+    notes.push("Query not suitable for static CAG");
+    return { recommendation: "not_needed", notes };
   }
 
   return { recommendation: "missing_cache", notes: ["Unexpected knowledge state"] };
@@ -130,29 +122,25 @@ function assessResponseChangeRisk({ knowledge, deterministicIntent, message }) {
   const notes = [];
   if (knowledge.mode !== "CAG") return { risk: false, notes };
 
-  if (HUMAN_ESCALATION_INTENTS.has(deterministicIntent)) {
+  if (knowledge.category === "revalidation_general" && deterministicIntent === "revalidacion_estudios") {
     notes.push("Injecting CAG must not remove human escalation already in deterministic response");
     return { risk: true, notes };
   }
-  if (deterministicIntent === "ubicacion_campus") {
+  if (knowledge.category === "location" || deterministicIntent === "ubicacion_campus") {
     notes.push("CAG ubicacion rules forbid asesor/visita; must match deterministic policy");
     return { risk: true, notes };
   }
-  if (/promocion/i.test(message) && deterministicIntent === "promociones_descuentos") {
+  if (knowledge.category === "promotions_general" || /promocion/i.test(message)) {
     notes.push("Promotions require dynamic validation; CAG must not invent vigentes");
+    return { risk: true, notes };
+  }
+  if (knowledge.category === "price_objection") {
+    notes.push("CAG must not promise exact scholarship; only official table");
     return { risk: true, notes };
   }
   return { risk: false, notes };
 }
 
-/**
- * @param {object} params
- * @param {string} params.message
- * @param {string} params.deterministicIntent
- * @param {string} params.deterministicResponse
- * @param {object} [params.conversationState]
- * @param {object} [params.options] - forwarded to getKnowledgeContext
- */
 function evaluateCagShadow({
   message,
   deterministicIntent,
@@ -175,8 +163,11 @@ function evaluateCagShadow({
 
   const contextPreview =
     knowledge.mode === "CAG"
-      ? extractContextSnippet(knowledge.context, message, deterministicIntent)
+      ? extractContextSnippet(knowledge.context, knowledge.category, message, deterministicIntent)
       : "";
+
+  const cagUseful =
+    recommendation === "useful" || recommendation === "useful_with_human_followup";
 
   return {
     shadowEnabled: true,
@@ -187,11 +178,14 @@ function evaluateCagShadow({
     knowledgeMode: knowledge.mode,
     knowledgeSource: knowledge.source,
     knowledgeVersion: knowledge.knowledgeVersion || null,
+    knowledgeCategory: knowledge.category || null,
+    knowledgeReason: knowledge.reason || null,
+    normalizedQuery: knowledge.normalizedQuery || null,
     contextAvailable: knowledge.mode === "CAG" && Boolean(knowledge.context),
     contextPreview,
     tokenEstimate: knowledge.tokenEstimate || null,
     recommendation,
-    cagUseful: recommendation === "useful",
+    cagUseful,
     responseChangeRisk: risk,
     finalResponseModified: false,
     notes: [...recNotes, ...riskNotes],
