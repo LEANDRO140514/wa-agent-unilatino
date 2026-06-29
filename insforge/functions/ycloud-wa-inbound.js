@@ -9,6 +9,11 @@ const NO_TEXT_RESPONSE =
   "Recibí tu mensaje, pero por ahora puedo ayudarte mejor si me escribes tu duda en texto 😊\n\nPuedes decirme, por ejemplo:\n\"Quiero información\"\n\"No sé qué estudiar\"\n\"Quiero una beca\"\n\"Quiero hablar con un asesor\"";
 
 const { applyTypoCorrections } = require("./lib/eva-text-normalizer.js");
+const {
+  isCagShadowLoggingEnabled,
+  redactCagShadowLog,
+  maybeLogCagShadow,
+} = require("./lib/knowledge/cagShadowLogging.js");
 
 const EVA_FALLBACK_INTELIGENTE =
   "Con gusto te ayudo 😊 ¿Me preguntas por carreras, becas, ubicación, costos, revalidación o quieres hablar con un asesor?";
@@ -175,6 +180,7 @@ function getConfig() {
     ghlRelevanceShadowMode: Deno.env.get("GHL_RELEVANCE_SHADOW_MODE") !== "false",
     ghlSyncPolicy: Deno.env.get("GHL_SYNC_POLICY") || "none",
     ghlLeadScoreThreshold: Number(Deno.env.get("GHL_LEAD_SCORE_THRESHOLD") || "45"),
+    evaCagShadowLogging: Deno.env.get("EVA_CAG_SHADOW_LOGGING") === "true",
     ghlMetaAdsLeadScoreThreshold: Number(
       Deno.env.get("GHL_META_ADS_LEAD_SCORE_THRESHOLD") || "50"
     ),
@@ -2836,6 +2842,21 @@ module.exports = async function handler(request) {
     );
     const enrichedDecision = enrichResult.decision;
 
+    try {
+      maybeLogCagShadow({
+        config,
+        messageText: parsed.message_text,
+        deterministicIntent: enrichedDecision.intent,
+        deterministicResponse: enrichedDecision.responseText,
+        conversationState: contactContext,
+      });
+    } catch (cagShadowErr) {
+      console.warn(
+        "[eva_cag_shadow_error]",
+        String(cagShadowErr?.message || "cag_shadow_failed").slice(0, 200),
+      );
+    }
+
     if (config.evaLlmEnabled && enrichedDecision.llm_meta && inboundId) {
       await logLlmShadowEntry(client, {
         inbound_message_id: inboundId,
@@ -3142,3 +3163,6 @@ handler.shouldCreateTaskDryRun = shouldCreateTaskDryRun;
 handler.shouldCreateTaskLive = shouldCreateTaskLive;
 handler.resolveGhlTaskTitle = resolveGhlTaskTitle;
 handler.getIntentTags = getIntentTags;
+handler.isCagShadowLoggingEnabled = isCagShadowLoggingEnabled;
+handler.redactCagShadowLog = redactCagShadowLog;
+handler.maybeLogCagShadow = maybeLogCagShadow;
