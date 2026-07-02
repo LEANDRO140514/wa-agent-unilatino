@@ -10,7 +10,10 @@
 ## Antes de empezar
 
 - [ ] Leandro o responsable técnico confirma que la prueba está **activa**.
-- [ ] Tu teléfono está en la **lista autorizada** (solo esos números reciben respuesta real).
+- [ ] Tu teléfono está en la **lista autorizada** (solo estos E.164 reciben GHL live):
+  - Leandro `+52******5583`
+  - Admisiones 1 `+52******4831`
+  - Admisiones 2 `+52******8094`
 - [ ] Tienes acceso a **GHL** abierto para revisar tu contacto.
 - [ ] Envía mensajes **uno por uno** y espera la respuesta de Eva antes del siguiente.
 
@@ -85,7 +88,7 @@ Si algo falla, avisa **de inmediato** a Leandro y al responsable técnico con:
 - En GHL: **contacto duplicado**, **task faltante** cuando pediste asesor, o **campo raro** modificado
 - Cualquier cosa que no se entienda o genere confusión
 
-**Canal de incidentes:** _(completar mañana — WhatsApp grupo / Leandro directo)_
+**Canal de incidentes:** Leandro directo / responsable técnico en sesión
 
 ---
 
