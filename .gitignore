@@ -13,3 +13,5 @@ insforge/functions/dist/
 secrets/
 *.key
 *.pem
+
+tests/.phase*.json
