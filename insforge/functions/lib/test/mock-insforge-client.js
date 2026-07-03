@@ -30,6 +30,7 @@ class QueryBuilder {
     this.filters = [];
     this.selectFields = "*";
     this.limitN = null;
+    this.orderBy = null;
     this.single = false;
   }
 
@@ -60,6 +61,11 @@ class QueryBuilder {
     return this;
   }
 
+  order(column, options = {}) {
+    this.orderBy = { column, ascending: options.ascending !== false };
+    return this;
+  }
+
   maybeSingle() {
     this.single = true;
     return this.execute();
@@ -77,6 +83,24 @@ class QueryBuilder {
       }
 
       if (this.op === "insert") {
+        if (
+          this.table === "wa_inbound_messages" &&
+          this.payload?.ycloud_message_id
+        ) {
+          const dup = rows.find(
+            (row) => row.ycloud_message_id === this.payload.ycloud_message_id,
+          );
+          if (dup) {
+            return {
+              data: null,
+              error: {
+                message:
+                  'duplicate key value violates unique constraint "idx_wa_inbound_messages_ycloud_message_id_unique"',
+                code: "23505",
+              },
+            };
+          }
+        }
         const row = {
           id: nextId(),
           created_at: new Date().toISOString(),
@@ -108,6 +132,17 @@ class QueryBuilder {
       let matched = rows.filter((row) =>
         this.filters.every((f) => row[f.column] === f.value),
       );
+      if (this.orderBy) {
+        const { column, ascending } = this.orderBy;
+        matched = [...matched].sort((a, b) => {
+          const av = a[column];
+          const bv = b[column];
+          if (av === bv) return 0;
+          if (av == null) return ascending ? -1 : 1;
+          if (bv == null) return ascending ? 1 : -1;
+          return ascending ? (av < bv ? -1 : 1) : av < bv ? 1 : -1;
+        });
+      }
       if (this.limitN) matched = matched.slice(0, this.limitN);
       if (this.single) {
         return { data: matched[0] || null, error: null };

@@ -1,0 +1,67 @@
+{
+  "phase": "ENG-0B",
+  "description": "Webhook idempotency by ycloud_message_id — mock DB + optional live InsForge",
+  "endpoint": "https://ernkyni3.us-east.insforge.app/functions/ycloud-wa-inbound",
+  "env": {
+    "WA_E2E_MOCK_DB": "true",
+    "WA_AGENT_MODE": "mock",
+    "GHL_SYNC_MODE": "dry_run",
+    "GHL_WRITE_CUSTOM_FIELDS": "false",
+    "ACADEMIC_ENGINE_ENABLED": "true",
+    "EVA_LLM_ENABLED": "false",
+    "INSFORGE_BASE_URL": "http://mock-insforge.local",
+    "ANON_KEY": "mock-anon-key"
+  },
+  "test_phone": "+525559990200",
+  "cases": [
+    {
+      "id": 1,
+      "name": "first_event",
+      "message_id": "eng0b-msg-001",
+      "input": "Hola, quiero información",
+      "expect_ok": true,
+      "expect_skipped": false,
+      "expect_idempotent": false,
+      "expect_inbound_delta": 1,
+      "expect_outbound_delta": 1,
+      "expect_ghl_log_delta": 1
+    },
+    {
+      "id": 2,
+      "name": "exact_replay",
+      "message_id": "eng0b-msg-001",
+      "input": "Hola, quiero información",
+      "expect_ok": true,
+      "expect_skipped": true,
+      "expect_idempotent": true,
+      "expect_reason": "duplicate_ycloud_message_id",
+      "expect_inbound_delta": 0,
+      "expect_outbound_delta": 0,
+      "expect_ghl_log_delta": 0
+    },
+    {
+      "id": 3,
+      "name": "same_phone_new_message_id",
+      "message_id": "eng0b-msg-002",
+      "input": "No sé qué estudiar",
+      "expect_ok": true,
+      "expect_skipped": false,
+      "expect_idempotent": false,
+      "expect_inbound_delta": 1,
+      "expect_outbound_delta": 1,
+      "expect_ghl_log_delta": 1
+    },
+    {
+      "id": 4,
+      "name": "missing_message_id",
+      "message_id": null,
+      "input": "Hola sin id",
+      "expect_ok": true,
+      "expect_skipped": false,
+      "expect_idempotent": false,
+      "expect_inbound_delta": 1,
+      "expect_outbound_delta": 1,
+      "expect_warning_type": "missing_ycloud_message_id"
+    }
+  ]
+}

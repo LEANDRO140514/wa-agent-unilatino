@@ -2678,6 +2678,71 @@ async function logWarning(client, entry) {
   }
 }
 
+/** YCloud message id for idempotency (ENG-0B). Empty/null → no dedup. */
+function resolveYcloudMessageId(parsed) {
+  const raw = parsed?.message_id || parsed?.event_id || null;
+  if (raw == null) return null;
+  const trimmed = String(raw).trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function isUniqueViolationError(error) {
+  if (!error) return false;
+  const code = String(error.code || "");
+  const message = String(error.message || error.details || "").toLowerCase();
+  return (
+    code === "23505" ||
+    message.includes("duplicate key") ||
+    message.includes("unique constraint")
+  );
+}
+
+async function findExistingInboundByYcloudMessageId(client, ycloudMessageId) {
+  if (!client || !ycloudMessageId) return null;
+
+  const { data, error } = await client.database
+    .from("wa_inbound_messages")
+    .select("id, ycloud_message_id, normalized_phone, status")
+    .eq("ycloud_message_id", ycloudMessageId)
+    .order("received_at", { ascending: true })
+    .limit(1);
+
+  if (error) {
+    throw new Error(`Lookup wa_inbound_messages by ycloud_message_id: ${error.message || String(error)}`);
+  }
+
+  const rows = Array.isArray(data) ? data : data ? [data] : [];
+  return rows[0] || null;
+}
+
+function buildIdempotentWebhookResponse(config, ycloudMessageId, existingInbound) {
+  return webhookResponse({
+    ok: true,
+    mode: config.mode,
+    provider: "ycloud",
+    skipped: true,
+    idempotent: true,
+    reason: "duplicate_ycloud_message_id",
+    ycloud_message_id: ycloudMessageId,
+    inbound_id: existingInbound?.id || null,
+    normalized_phone: existingInbound?.normalized_phone || null,
+  });
+}
+
+async function tryIdempotentEarlyReturn(client, config, ycloudMessageId) {
+  if (!ycloudMessageId) return null;
+  const existing = await findExistingInboundByYcloudMessageId(client, ycloudMessageId);
+  if (!existing) return null;
+  return buildIdempotentWebhookResponse(config, ycloudMessageId, existing);
+}
+
+async function handleInboundInsertUniqueRace(client, config, ycloudMessageId, inboundError) {
+  if (!ycloudMessageId || !isUniqueViolationError(inboundError)) return null;
+  const existing = await findExistingInboundByYcloudMessageId(client, ycloudMessageId);
+  if (!existing) return null;
+  return buildIdempotentWebhookResponse(config, ycloudMessageId, existing);
+}
+
 const ACADEMIC_STATE_KEYS = [
   "current_intent",
   "current_career",
@@ -2991,6 +3056,7 @@ module.exports = async function handler(request) {
 
   try {
     const client = await getClient();
+    const ycloudMessageId = resolveYcloudMessageId(parsed);
 
     if (!normalizedPhone) {
       await logWarning(client, {
@@ -3000,10 +3066,22 @@ module.exports = async function handler(request) {
       });
     }
 
+    if (!ycloudMessageId) {
+      await logWarning(client, {
+        normalized_phone: normalizedPhone || null,
+        error_type: "webhook_warning",
+        error_message: "missing_ycloud_message_id; idempotency skipped",
+        raw_context: { event_type: parsed.event_type },
+      });
+    } else {
+      const idempotentResponse = await tryIdempotentEarlyReturn(client, config, ycloudMessageId);
+      if (idempotentResponse) return idempotentResponse;
+    }
+
     const { data: inboundRows, error: inboundError } = await client.database
       .from("wa_inbound_messages")
       .insert({
-        ycloud_message_id: parsed.message_id || parsed.event_id || null,
+        ycloud_message_id: ycloudMessageId,
         from_phone: parsed.from || null,
         to_phone: parsed.to || null,
         normalized_phone: normalizedPhone || parsed.from || null,
@@ -3019,6 +3097,16 @@ module.exports = async function handler(request) {
       })
       .select("id")
       .limit(1);
+
+    if (inboundError) {
+      const raceResponse = await handleInboundInsertUniqueRace(
+        client,
+        config,
+        ycloudMessageId,
+        inboundError,
+      );
+      if (raceResponse) return raceResponse;
+    }
     throwIfError(inboundError, "Insert wa_inbound_messages");
     inboundId = inboundRows?.[0]?.id || null;
 
@@ -3376,6 +3464,11 @@ module.exports = async function handler(request) {
 };
 
 const handler = module.exports;
+handler.parseInboundPayload = parseInboundPayload;
+handler.resolveYcloudMessageId = resolveYcloudMessageId;
+handler.findExistingInboundByYcloudMessageId = findExistingInboundByYcloudMessageId;
+handler.buildIdempotentWebhookResponse = buildIdempotentWebhookResponse;
+handler.isUniqueViolationError = isUniqueViolationError;
 handler.classifyIntent = classifyIntent;
 handler.shouldShowAmbiguoMenu = shouldShowAmbiguoMenu;
 handler.parseAcademicStateFromContact = parseAcademicStateFromContact;
