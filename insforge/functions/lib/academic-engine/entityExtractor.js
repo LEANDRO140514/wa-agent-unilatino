@@ -140,6 +140,16 @@ export function detectPreguntaFlags(n) {
       n.includes("costo") ||
       n.includes("colegiatura") ||
       n.includes("mensualidad"),
+    pregunta_duracion:
+      n.includes("cuanto dura") ||
+      n.includes("cuánto dura") ||
+      n.includes("cuantos anos") ||
+      n.includes("cuantos años") ||
+      n.includes("cuántos años") ||
+      n.includes("cuantos anios") ||
+      n.includes("duracion") ||
+      n.includes("duración") ||
+      (n.includes("dura") && (n.includes("cuanto") || n.includes("cuánto") || n.includes("tiempo"))),
     pregunta_practicas:
       n.includes("practicas profesionales") ||
       n.includes("practica profesional") ||

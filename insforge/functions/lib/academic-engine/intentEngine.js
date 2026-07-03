@@ -22,13 +22,17 @@ const VOCATIONAL_KEYWORDS = [
 
 const BANNED_CLAIM_TRIGGERS = ["nasa", "7 paises", "siete paises", "trilingue", "trilingüe"];
 
+function careerFromContext(entities, state = {}) {
+  return entities.careerName || state.current_career || state.last_career || null;
+}
+
 /**
  * @param {string} normalizedInput
  * @param {object} entities
- * @param {object} _state
+ * @param {object} state
  * @returns {string}
  */
-export function detectAcademicIntent(normalizedInput, entities, _state = {}) {
+export function detectAcademicIntent(normalizedInput, entities, state = {}) {
   const n = normalizedInput.trim();
 
   if (HUMANO_KEYWORDS.some((k) => n.includes(k))) return "fallback";
@@ -53,6 +57,15 @@ export function detectAcademicIntent(normalizedInput, entities, _state = {}) {
     }
     return "faq";
   }
+
+  const contextCareer = careerFromContext(entities, state);
+
+  if (entities.pregunta_duracion) {
+    if (contextCareer) return "career_detail";
+    return "faq";
+  }
+
+  if (contextCareer && (entities.pregunta_costo || n.includes("cuanto cuesta"))) return "career_detail";
 
   if (entities.careerName && (entities.pregunta_costo || n.includes("cuanto cuesta"))) return "career_detail";
 

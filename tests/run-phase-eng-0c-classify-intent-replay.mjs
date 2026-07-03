@@ -8,28 +8,56 @@
 
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const FIXTURE = path.join(ROOT, "tests/payloads/phase-eng-0c-classify-intent-replay.json");
 const OUT_JSON = path.join(ROOT, "tests/.phase-eng-0c-replay-results.json");
+const HANDLER_PATH = path.join(ROOT, "insforge/functions/ycloud-wa-inbound.js");
+const MOCK_DB_PATH = path.join(ROOT, "insforge/functions/lib/test/mock-insforge-client.js");
 
 const fixture = JSON.parse(fs.readFileSync(FIXTURE, "utf8"));
+const LOCAL = process.env.PHASE_ENG0C_LOCAL === "1" || process.env.PHASE_ENG0C_LOCAL === "true";
 const ENDPOINT = process.env.PHASE_ENG0C_ENDPOINT || fixture.endpoint;
-const RUN_ID = process.env.PHASE_ENG0C_RUN_ID || Date.now().toString(36);
+const RUN_NUM = String(process.env.PHASE_ENG0C_RUN_ID || Date.now()).replace(/\D/g, "").slice(-8).padStart(8, "0");
+
+let localHandler = null;
+let resetMockInsforgeStore = null;
+
+async function initLocalHandler() {
+  if (localHandler) return;
+  for (const [key, value] of Object.entries({
+    WA_E2E_MOCK_DB: "true",
+    WA_AGENT_MODE: "mock",
+    GHL_SYNC_MODE: "dry_run",
+    GHL_WRITE_CUSTOM_FIELDS: "false",
+    ACADEMIC_ENGINE_ENABLED: "true",
+    EVA_LLM_ENABLED: "false",
+    INSFORGE_BASE_URL: "http://mock-insforge.local",
+    ANON_KEY: "mock-anon-key",
+  })) {
+    process.env[key] = value;
+  }
+  if (!globalThis.Deno) {
+    globalThis.Deno = { env: { get: (key) => process.env[key] } };
+  }
+  ({ resetMockInsforgeStore } = await import(pathToFileURL(MOCK_DB_PATH).href));
+  localHandler = (await import(pathToFileURL(HANDLER_PATH).href)).default;
+  resetMockInsforgeStore();
+}
 
 function phoneFromSuffix(suffix) {
   const s = String(suffix).replace(/\D/g, "").padStart(4, "0").slice(-4);
-  return `+52555${RUN_ID.slice(-4)}${s}`;
+  return `+5255${RUN_NUM.slice(0, 4)}${s}`;
 }
 
 function freshMultiTurnPhone() {
-  return `+52555${RUN_ID.slice(-3)}8000`;
+  return `+5255${RUN_NUM.slice(0, 4)}8000`;
 }
 
 function freshIdempotencyPhone() {
-  return `+52555${RUN_ID.slice(-3)}8001`;
+  return `+5255${RUN_NUM.slice(0, 4)}8001`;
 }
 
 function normalizeForMatch(s) {
@@ -74,6 +102,17 @@ function buildPayload({ phone, messageText, messageId }) {
 }
 
 async function post(payload) {
+  if (LOCAL) {
+    await initLocalHandler();
+    const request = new Request("http://localhost/ycloud-wa-inbound", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const response = await localHandler(request);
+    const body = await response.json();
+    return { status: response.status, body };
+  }
   const response = await fetch(ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -215,7 +254,7 @@ async function runMultiTurn(group) {
 
 async function runIdempotency(group) {
   const phone = freshIdempotencyPhone();
-  const messageId = `${group.message_id}-${RUN_ID}`;
+  const messageId = `${group.message_id}-${RUN_NUM}`;
   const payload = buildPayload({
     phone,
     messageText: group.input,
@@ -272,8 +311,10 @@ async function runIdempotency(group) {
 }
 
 async function main() {
-  console.log(`ENG-0C classifyIntent replay → ${ENDPOINT}`);
-  console.log(`Run ID: ${RUN_ID}\n`);
+  console.log(
+    `ENG-0C classifyIntent replay → ${LOCAL ? "local mock handler" : ENDPOINT}`,
+  );
+  console.log(`Run NUM: ${RUN_NUM}\n`);
 
   const pf = await preflight();
   if (!pf.pass) {
@@ -316,8 +357,9 @@ async function main() {
 
   const summary = {
     phase: "ENG-0C",
-    run_id: RUN_ID,
-    endpoint: ENDPOINT,
+    run_num: RUN_NUM,
+    mode: LOCAL ? "local_mock" : "remote",
+    endpoint: LOCAL ? "local mock handler" : ENDPOINT,
     preflight: { pass: pf.pass, mode: pf.body.mode, ghl_sync_mode: pf.body.ghl_sync_mode },
     groups: {
       A: allResults.filter((r) => r.group === "A"),

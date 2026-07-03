@@ -2105,6 +2105,11 @@ function matchesCarrerasDisponibles(text, hasAny) {
     "lista de carreras",
     "catalogo de carreras",
     "catálogo de carreras",
+    "quiero ver carreras",
+    "ver carreras",
+    "quiero conocer las carreras",
+    "quiero conocer carreras",
+    "carreras disponibles",
   ]);
 }
 

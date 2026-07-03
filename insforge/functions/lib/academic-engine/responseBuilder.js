@@ -89,12 +89,15 @@ function renderCareerDetail(entities, state) {
   const policies = getPolicies();
   const safe = getSafeRequirementsResponse();
 
-  const needsSafe =
-    (entities.pregunta_practicas && entities.careerName) ||
-    (state?.last_career &&
-      (entities.pregunta_practicas || normalizeInput(String(state.last_question || "")).includes("campo clinico")));
+  const careerName = entities.careerName || state?.current_career || state?.last_career || null;
+  const entitiesWithCareer = careerName ? { ...entities, careerName } : entities;
 
-  const careerForSafe = entities.careerName || state?.last_career;
+  const needsSafe =
+    (entitiesWithCareer.pregunta_practicas && entitiesWithCareer.careerName) ||
+    (state?.last_career &&
+      (entitiesWithCareer.pregunta_practicas || normalizeInput(String(state.last_question || "")).includes("campo clinico")));
+
+  const careerForSafe = entitiesWithCareer.careerName || state?.last_career;
   if (needsSafe && careerForSafe) {
     const c = getActiveCareers().find((x) => x.name === careerForSafe || x.programa_base === careerForSafe);
     if (
@@ -108,11 +111,11 @@ function renderCareerDetail(entities, state) {
     }
   }
 
-  const modality = entities.modality || state?.current_modality || null;
-  let matched = careersMatchingName(entities.careerName, modality);
+  const modality = entitiesWithCareer.modality || state?.current_modality || null;
+  let matched = careersMatchingName(entitiesWithCareer.careerName, modality);
 
-  if (!matched.length && entities.careerName) {
-    matched = careersMatchingName(entities.careerName);
+  if (!matched.length && entitiesWithCareer.careerName) {
+    matched = careersMatchingName(entitiesWithCareer.careerName);
   }
 
   if (!matched.length) {
@@ -132,6 +135,15 @@ function renderCareerDetail(entities, state) {
   }
 
   const c = matched[0];
+
+  if (entitiesWithCareer.pregunta_duracion && !entitiesWithCareer.pregunta_costo) {
+    return {
+      text: `${c.name}\n• Duración: ${c.duration}\n• Modalidad: ${c.modality_label}`,
+      pending_validation_used: false,
+      source_context: "careers",
+    };
+  }
+
   const parts = [
     c.name,
     `• Modalidad: ${c.modality_label}`,
@@ -273,6 +285,13 @@ function renderContact() {
 
 function renderFaq(entities) {
   const policies = getPolicies();
+  if (entities.pregunta_duracion && !entities.careerName) {
+    return {
+      text: "¿De qué carrera te gustaría saber la duración?",
+      pending_validation_used: false,
+      source_context: "careers",
+    };
+  }
   if (entities.pregunta_practicas && policies.practicas_profesionales_garantizadas) {
     return {
       text: "Sí, Universidad Latino cuenta con prácticas profesionales garantizadas como parte de la formación institucional.\n\n" + getSafeRequirementsResponse(),
