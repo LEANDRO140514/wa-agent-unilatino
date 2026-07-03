@@ -4,11 +4,10 @@
  */
 
 const fs = require("fs");
-const path = require("path");
 const { normalizeCagQuery, classifyCagQuery } = require("./cagQueryNormalizer");
 
-const ROOT = path.resolve(__dirname, "../../../..");
-const DEFAULT_CACHE_PATH = path.join(ROOT, "docs/knowledge/cache/eva-cache-v1.json");
+// Edge runtime has no local cache file; loadCache returns null and CAG stays in NONE mode.
+const DEFAULT_CACHE_PATH = "docs/knowledge/cache/eva-cache-v1.json";
 
 let _cache = null;
 let _cachePath = null;

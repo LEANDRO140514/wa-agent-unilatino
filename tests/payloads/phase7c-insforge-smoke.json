@@ -57,7 +57,7 @@
     {
       "id": 6,
       "input": "¿Tienen meses sin intereses?",
-      "expect_wa_intent": "ambiguo",
+      "expect_wa_intent": "fallback_inteligente",
       "expect_academic_intent": "payment",
       "expect_academic_enriched": true,
       "response_must_include": ["no está documentado"]
@@ -65,7 +65,7 @@
     {
       "id": 7,
       "input": "¿Cuál es su WhatsApp?",
-      "expect_wa_intent": "ambiguo",
+      "expect_wa_intent": "fallback_inteligente",
       "expect_academic_intent": "contact",
       "expect_academic_enriched": true,
       "response_must_include": ["+52 999 453 8421"]

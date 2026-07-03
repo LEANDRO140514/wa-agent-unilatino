@@ -28,6 +28,8 @@ execFileSync(
     "--format=cjs",
     `--outfile=${outfile}`,
     "--external:npm:@insforge/sdk",
+    "--alias:fs=./scripts/edge-fs-shim.js",
+    "--alias:path=./scripts/edge-path-shim.js",
   ],
   { stdio: "inherit", cwd: ROOT, shell: true },
 );

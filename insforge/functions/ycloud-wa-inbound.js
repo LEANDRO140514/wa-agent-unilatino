@@ -2729,9 +2729,110 @@ function sanitizeAcademicStateForDb(state) {
   return hasValue ? normalized : null;
 }
 
+/** Runtime real: SDK puede omitir columnas nuevas tras ADD COLUMN; RPC directo solo para academic_state. */
+function getRuntimeEnv(name) {
+  if (typeof Deno !== "undefined" && Deno.env && typeof Deno.env.get === "function") {
+    return Deno.env.get(name);
+  }
+  if (typeof process !== "undefined" && process.env) {
+    return process.env[name];
+  }
+  return undefined;
+}
+
+function shouldUseAcademicStateRestDirect() {
+  return getRuntimeEnv("WA_E2E_MOCK_DB") !== "true";
+}
+
+/**
+ * Lee academic_state vía RPC SDK (bypass schema cache; evita HTTP 508 loop en edge).
+ */
+async function readContactAcademicStateDirect(normalizedPhone, client = null) {
+  if (!client || !normalizedPhone) return {};
+
+  try {
+    const { data, error } = await client.database.rpc("get_wa_contact_academic_state", {
+      p_normalized_phone: normalizedPhone,
+    });
+    if (error) {
+      await logWarning(client, {
+        normalized_phone: normalizedPhone,
+        error_type: "academic_state_read_failed",
+        error_message: error.message || String(error),
+        raw_context: {},
+      });
+      return {};
+    }
+    return parseAcademicStateFromContact(data);
+  } catch (err) {
+    if (client) {
+      await logWarning(client, {
+        normalized_phone: normalizedPhone,
+        error_type: "academic_state_read_failed",
+        error_message: err instanceof Error ? err.message : String(err),
+        raw_context: {},
+      });
+    }
+    return {};
+  }
+}
+
+/**
+ * Persiste academic_state vía RPC SDK; el SDK sigue manejando wa_stage/wa_last_intent/etc.
+ */
+async function patchContactAcademicStateDirect(
+  normalizedPhone,
+  academicState,
+  client = null,
+  rowId = null,
+) {
+  if (!client || !normalizedPhone) {
+    throw new Error("patchContactAcademicStateDirect: missing client or phone");
+  }
+
+  const payload = sanitizeAcademicStateForDb(academicState);
+  if (!payload) {
+    await logWarning(client, {
+      normalized_phone: normalizedPhone,
+      error_type: "academic_state_patch_skipped_empty",
+      error_message: "sanitizeAcademicStateForDb returned null; skip RPC",
+      raw_context: { row_id: rowId || null },
+    });
+    return { updated: 0, skipped: true };
+  }
+
+  const { data, error } = await client.database.rpc("patch_wa_contact_academic_state", {
+    p_normalized_phone: normalizedPhone,
+    p_academic_state: payload,
+  });
+
+  if (error) {
+    await logWarning(client, {
+      normalized_phone: normalizedPhone,
+      error_type: "academic_state_patch_failed",
+      error_message: error.message || String(error),
+      raw_context: { row_id: rowId || null },
+    });
+    throw new Error(`patchContactAcademicStateDirect: ${error.message || String(error)}`);
+  }
+
+  if (data == null) {
+    await logWarning(client, {
+      normalized_phone: normalizedPhone,
+      error_type: "academic_state_patch_zero_rows",
+      error_message: "RPC returned null (row missing?)",
+      raw_context: { row_id: rowId || null },
+    });
+    throw new Error("patchContactAcademicStateDirect: zero rows updated");
+  }
+
+  return { updated: 1, skipped: false, academic_state: data };
+}
+
 /**
  * Upsert wa_contacts_state: campos operativos WA + academic_state (memoria multi-turno).
  * academic_state se escribe tras applyAcademicAndLlmEnrichment (enrichResult.academicState).
+ * En runtime InsForge, academic_state usa RPC SDK (ENG-0A-bis); mock DB usa SDK column path.
  */
 async function upsertContactState(
   client,
@@ -2756,8 +2857,13 @@ async function upsertContactState(
     wa_needs_human: decision.needsHuman,
     wa_summary: `Intent: ${decision.intent}`,
     updated_at: nowIso,
-    academic_state: sanitizeAcademicStateForDb(academicState),
   };
+
+  if (!shouldUseAcademicStateRestDirect()) {
+    contactPayload.academic_state = sanitizeAcademicStateForDb(academicState);
+  }
+
+  let contactRowId = existingContact?.id || null;
 
   if (existingContact?.id) {
     const { error: contactUpdateError } = await client.database
@@ -2773,6 +2879,18 @@ async function upsertContactState(
         ...contactPayload,
       });
     throwIfError(contactInsertError, "Insert wa_contacts_state");
+
+    const { data: insertedContact, error: insertedLookupError } = await client.database
+      .from("wa_contacts_state")
+      .select("id")
+      .eq("normalized_phone", phone)
+      .maybeSingle();
+    throwIfError(insertedLookupError, "Lookup wa_contacts_state after insert");
+    contactRowId = insertedContact?.id || null;
+  }
+
+  if (shouldUseAcademicStateRestDirect()) {
+    await patchContactAcademicStateDirect(phone, academicState, client, contactRowId);
   }
 }
 
@@ -2920,6 +3038,11 @@ module.exports = async function handler(request) {
           wa_last_intent: prevContact.wa_last_intent,
           wa_needs_human: prevContact.wa_needs_human,
         };
+      }
+      // ENG-0A-bis: RPC SDK evita schema cache del SDK y HTTP 508 loop en edge.
+      if (shouldUseAcademicStateRestDirect()) {
+        academicState = await readContactAcademicStateDirect(normalizedPhone, client);
+      } else if (prevContact) {
         academicState = parseAcademicStateFromContact(prevContact.academic_state);
       }
     }
@@ -3257,6 +3380,9 @@ handler.classifyIntent = classifyIntent;
 handler.shouldShowAmbiguoMenu = shouldShowAmbiguoMenu;
 handler.parseAcademicStateFromContact = parseAcademicStateFromContact;
 handler.sanitizeAcademicStateForDb = sanitizeAcademicStateForDb;
+handler.shouldUseAcademicStateRestDirect = shouldUseAcademicStateRestDirect;
+handler.readContactAcademicStateDirect = readContactAcademicStateDirect;
+handler.patchContactAcademicStateDirect = patchContactAcademicStateDirect;
 handler.upsertContactState = upsertContactState;
 handler.applyAcademicAndLlmEnrichment = applyAcademicAndLlmEnrichment;
 handler.logLlmShadowEntry = logLlmShadowEntry;
