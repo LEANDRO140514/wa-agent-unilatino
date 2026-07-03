@@ -21,7 +21,7 @@ const {
 } = require("./lib/knowledge/cagAssistiveShadowComparison.js");
 
 const EVA_FALLBACK_INTELIGENTE =
-  "Con gusto te ayudo 😊 ¿Me preguntas por carreras, becas, ubicación, costos, revalidación o quieres hablar con un asesor?";
+  "¡Hola de nuevo! 😊 Sigamos por aquí: puedo ayudarte con carreras, becas, ubicación, costos o revalidación.\n\nEscríbeme tu duda concreta (por ejemplo: \"Derecho online\" o \"tengo promedio 9.2\") o dime si quieres hablar con un asesor.";
 
 const EVA_AMBIGUO_MENU =
   "¡Hola! Soy Eva, asistente de Universidad Latino 😊\n\nCon gusto te ayudo. ¿Qué te gustaría conocer?\n\n1. Carreras disponibles\n2. Becas\n3. Hacer el test vocacional\n4. Hablar con un asesor";
@@ -2254,6 +2254,19 @@ function matchesVagueGreeting(text, hasAny) {
   ]) || trimmed === "me interesa";
 }
 
+/**
+ * Menú numerado (EVA_AMBIGUO_MENU) solo en el primer saludo sin historial.
+ * Si ya hubo un turno (wa_last_intent) o el lead avanzó de etapa (wa_stage ≠ inicio),
+ * un nuevo "hola"/"info" debe ir a fallback_inteligente — ver prompts/eva-wa-principal.md.
+ */
+function shouldShowAmbiguoMenu(contactContext = {}) {
+  const stage = String(contactContext.wa_stage || "").trim();
+  const lastIntent = String(contactContext.wa_last_intent || "").trim();
+  if (lastIntent) return false;
+  if (stage && stage !== "inicio") return false;
+  return true;
+}
+
 function normalizeMenuInput(rawText) {
   let s = String(rawText || "").trim().toLowerCase();
   s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -2382,7 +2395,8 @@ function classifyIntent(rawText, config, contactContext = {}) {
   }
 
   if (matchesVagueGreeting(text, hasAny)) {
-    return returnIntent("ambiguo", config, null, contactContext);
+    const intent = shouldShowAmbiguoMenu(contactContext) ? "ambiguo" : "fallback_inteligente";
+    return returnIntent(intent, config, null, contactContext);
   }
 
   return returnIntent("fallback_inteligente", config, null, contactContext);
@@ -3168,6 +3182,7 @@ module.exports = async function handler(request) {
 
 const handler = module.exports;
 handler.classifyIntent = classifyIntent;
+handler.shouldShowAmbiguoMenu = shouldShowAmbiguoMenu;
 handler.applyAcademicAndLlmEnrichment = applyAcademicAndLlmEnrichment;
 handler.logLlmShadowEntry = logLlmShadowEntry;
 handler.getConfig = getConfig;

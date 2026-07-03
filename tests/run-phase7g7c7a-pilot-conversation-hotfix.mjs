@@ -213,12 +213,32 @@ const cases = [
     },
   },
   {
+    id: "hola-repeat-no-menu",
+    input: "hola",
+    context: { wa_stage: "inicio", wa_last_intent: "ambiguo" },
+    expect: {
+      intent: "fallback_inteligente",
+      no_menu: true,
+      must_include: ["carreras", "becas", "asesor"],
+    },
+  },
+  {
+    id: "info-after-conversation",
+    input: "info",
+    context: { wa_stage: "carrera_interes", wa_last_intent: "carrera_interes" },
+    expect: {
+      intent: "fallback_inteligente",
+      no_menu: true,
+      must_include: ["Derecho online"],
+    },
+  },
+  {
     id: "fallback-inteligente",
     input: "xyz pregunta rara sin sentido",
     expect: {
       intent: "fallback_inteligente",
       no_menu: true,
-      must_include: ["carreras, becas, ubicación"],
+      must_include: ["carreras", "becas", "asesor"],
     },
   },
 ];
