@@ -1,0 +1,137 @@
+{
+  "phase": "VAL-0",
+  "description": "Piloto admisiones seguro — runtime remoto mock/dry_run",
+  "endpoint": "https://ernkyni3.us-east.insforge.app/functions/ycloud-wa-inbound",
+  "required_runtime_flags": {
+    "mode": "mock",
+    "ghl_sync_mode": "dry_run",
+    "academic_engine_enabled": true,
+    "eva_llm_enabled": false,
+    "outbound_real": false,
+    "ghl_live": false,
+    "custom_fields_written": false
+  },
+  "ghost_careers": ["contaduría", "contaduria", "arquitectura", "criminología", "criminologia", "medicina"],
+  "banned_claims": ["nasa", "space apps", "7 países", "7 paises"],
+  "conversations": [
+    {
+      "id": 1,
+      "name": "Lead frío / menú",
+      "phone_suffix": "1001",
+      "turns": [
+        {
+          "input": "Hola",
+          "expect_wa_intents": ["ambiguo", "fallback_inteligente"],
+          "allow_menu": true
+        },
+        {
+          "input": "Quiero ver carreras",
+          "expect_wa_intent": "carreras_disponibles",
+          "expect_academic_intent": "career_list",
+          "expect_academic_enriched": true,
+          "response_must_include": ["opciones oficiales", "Derecho"]
+        },
+        {
+          "input": "Me interesa Derecho online",
+          "expect_wa_intent": "carrera_interes",
+          "expect_academic_intent": "career_detail",
+          "expect_academic_enriched": true,
+          "response_must_include": ["Derecho", "línea"]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Costos + duración multi-turn",
+      "phone_suffix": "1002",
+      "turns": [
+        {
+          "input": "Me interesa Derecho online",
+          "expect_wa_intent": "carrera_interes",
+          "expect_academic_enriched": true,
+          "response_must_include": ["Derecho"]
+        },
+        {
+          "input": "Cuanto cuesta?",
+          "expect_academic_enriched": true,
+          "response_must_include_any": ["$", "costo", "inscripción", "mensualidad", "colegiatura"]
+        },
+        {
+          "input": "Y cuanto dura?",
+          "expect_academic_enriched": true,
+          "response_must_include_any": ["año", "años", "duración", "duracion", "3"]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Beca",
+      "phone_suffix": "1003",
+      "turns": [
+        {
+          "input": "Tengo promedio 9.3, qué beca me toca?",
+          "expect_wa_intent": "beca",
+          "expect_academic_intent": "scholarship",
+          "expect_academic_enriched": true,
+          "response_must_include": ["50%"],
+          "response_must_not_include": ["nasa", "7 países"]
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "No sabe qué estudiar",
+      "phone_suffix": "1004",
+      "turns": [
+        {
+          "input": "No sé qué estudiar",
+          "expect_wa_intent": "no_se_que_estudiar",
+          "expect_academic_skipped": true,
+          "response_must_include": ["test vocacional"],
+          "response_must_not_include": ["opciones oficiales"]
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Humano / asesor",
+      "phone_suffix": "1005",
+      "turns": [
+        {
+          "input": "Quiero hablar con un asesor",
+          "expect_wa_intent": "humano",
+          "expect_wa_needs_human": true,
+          "expect_ghl_would_create_task": true,
+          "response_must_include": ["canalizar con un asesor"]
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Requisitos/documentos",
+      "phone_suffix": "1006",
+      "turns": [
+        {
+          "input": "Qué documentos necesito para inscribirme?",
+          "expect_wa_intents": ["fallback_inteligente", "carrera_interes"],
+          "expect_academic_intent": "documents",
+          "expect_academic_enriched": true,
+          "response_must_include": ["Documentos para inscripción"]
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Idempotencia en piloto",
+      "phone_suffix": "1007",
+      "idempotency": {
+        "message_id": "val0-idem-001",
+        "input": "No sé qué estudiar",
+        "expect_wa_intent_first": "no_se_que_estudiar",
+        "expect_replay_skipped": true,
+        "expect_replay_idempotent": true,
+        "expect_replay_reason": "duplicate_ycloud_message_id"
+      }
+    }
+  ]
+}
