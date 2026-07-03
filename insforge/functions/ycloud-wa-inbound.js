@@ -2678,7 +2678,70 @@ async function logWarning(client, entry) {
   }
 }
 
-async function upsertContactState(client, phone, decision, nowIso, config, outboundStatus) {
+const ACADEMIC_STATE_KEYS = [
+  "current_intent",
+  "current_career",
+  "current_area",
+  "current_modality",
+  "last_career",
+  "last_question",
+];
+
+/**
+ * Lee academic_state persistido (JSON/JSONB) desde wa_contacts_state.
+ * Primera interacción o columna vacía → {} para que academic-engine arranque limpio.
+ */
+function parseAcademicStateFromContact(raw) {
+  if (raw == null) return {};
+
+  let parsed = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch (_err) {
+      return {};
+    }
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+
+  const state = {};
+  for (const key of ACADEMIC_STATE_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+      state[key] = parsed[key];
+    }
+  }
+  return state;
+}
+
+/** Normaliza el state devuelto por academic-engine antes de persistir en wa_contacts_state. */
+function sanitizeAcademicStateForDb(state) {
+  if (!state || typeof state !== "object" || Array.isArray(state)) return null;
+
+  const normalized = {};
+  for (const key of ACADEMIC_STATE_KEYS) {
+    normalized[key] = Object.prototype.hasOwnProperty.call(state, key) ? state[key] : null;
+  }
+
+  const hasValue = Object.values(normalized).some(
+    (value) => value !== null && value !== undefined && String(value).trim() !== "",
+  );
+  return hasValue ? normalized : null;
+}
+
+/**
+ * Upsert wa_contacts_state: campos operativos WA + academic_state (memoria multi-turno).
+ * academic_state se escribe tras applyAcademicAndLlmEnrichment (enrichResult.academicState).
+ */
+async function upsertContactState(
+  client,
+  phone,
+  decision,
+  nowIso,
+  config,
+  outboundStatus,
+  academicState = null,
+) {
   const { data: existingContact, error: contactLookupError } = await client.database
     .from("wa_contacts_state")
     .select("id")
@@ -2693,6 +2756,7 @@ async function upsertContactState(client, phone, decision, nowIso, config, outbo
     wa_needs_human: decision.needsHuman,
     wa_summary: `Intent: ${decision.intent}`,
     updated_at: nowIso,
+    academic_state: sanitizeAcademicStateForDb(academicState),
   };
 
   if (existingContact?.id) {
@@ -2841,15 +2905,22 @@ module.exports = async function handler(request) {
     inboundId = inboundRows?.[0]?.id || null;
 
     let contactContext = {};
+    // Memoria académica multi-turno: se lee al inicio y se reescribe al final en upsertContactState.
+    let academicState = {};
     if (normalizedPhone) {
       const { data: prevContact, error: prevContactError } = await client.database
         .from("wa_contacts_state")
-        .select("wa_stage, wa_last_intent, wa_needs_human")
+        .select("wa_stage, wa_last_intent, wa_needs_human, academic_state")
         .eq("normalized_phone", normalizedPhone)
         .maybeSingle();
       throwIfError(prevContactError, "Lookup wa_contacts_state for context");
       if (prevContact) {
-        contactContext = prevContact;
+        contactContext = {
+          wa_stage: prevContact.wa_stage,
+          wa_last_intent: prevContact.wa_last_intent,
+          wa_needs_human: prevContact.wa_needs_human,
+        };
+        academicState = parseAcademicStateFromContact(prevContact.academic_state);
       }
     }
 
@@ -2858,7 +2929,7 @@ module.exports = async function handler(request) {
       decision,
       parsed.message_text,
       config,
-      {},
+      academicState,
     );
     const enrichedDecision = enrichResult.decision;
 
@@ -2994,7 +3065,8 @@ module.exports = async function handler(request) {
       enrichedDecision,
       nowIso,
       config,
-      outboundStatus
+      outboundStatus,
+      enrichResult.academicState,
     );
 
     let ghlSync = null;
@@ -3183,6 +3255,9 @@ module.exports = async function handler(request) {
 const handler = module.exports;
 handler.classifyIntent = classifyIntent;
 handler.shouldShowAmbiguoMenu = shouldShowAmbiguoMenu;
+handler.parseAcademicStateFromContact = parseAcademicStateFromContact;
+handler.sanitizeAcademicStateForDb = sanitizeAcademicStateForDb;
+handler.upsertContactState = upsertContactState;
 handler.applyAcademicAndLlmEnrichment = applyAcademicAndLlmEnrichment;
 handler.logLlmShadowEntry = logLlmShadowEntry;
 handler.getConfig = getConfig;
