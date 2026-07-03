@@ -1,0 +1,185 @@
+{
+  "phase": "ENG-0C",
+  "description": "Replay conversacional seguro — classifyIntent + academic_state + idempotencia (InsForge mock/dry_run)",
+  "endpoint": "https://ernkyni3.us-east.insforge.app/functions/ycloud-wa-inbound",
+  "required_runtime_flags": {
+    "mode": "mock",
+    "ghl_sync_mode": "dry_run",
+    "academic_engine_enabled": true,
+    "eva_llm_enabled": false,
+    "outbound_real": false,
+    "ghl_live": false,
+    "custom_fields_written": false
+  },
+  "ghost_careers": ["contaduría", "contaduria", "arquitectura", "criminología", "criminologia", "medicina"],
+  "menu_markers": ["1. Carreras disponibles", "2. Becas", "3. Hacer el test vocacional"],
+  "groups": {
+    "A": {
+      "name": "Menú / ambiguo / fallback",
+      "cases": [
+        {
+          "id": "A1",
+          "input": "Hola",
+          "phone_suffix": "0101",
+          "expect_wa_intents": ["ambiguo", "fallback_inteligente"],
+          "allow_menu": true,
+          "expect_academic_enriched": false
+        },
+        {
+          "id": "A2",
+          "input": "Info",
+          "phone_suffix": "0102",
+          "expect_wa_intents": ["ambiguo", "fallback_inteligente"],
+          "allow_menu": true
+        },
+        {
+          "id": "A3",
+          "input": "¿Tienen meses sin intereses?",
+          "phone_suffix": "0103",
+          "expect_wa_intent": "fallback_inteligente",
+          "expect_academic_intent": "payment",
+          "expect_academic_enriched": true,
+          "response_must_include": ["no está documentado"],
+          "no_menu": true
+        },
+        {
+          "id": "A4",
+          "input": "¿Cuál es su WhatsApp?",
+          "phone_suffix": "0104",
+          "expect_wa_intent": "fallback_inteligente",
+          "expect_academic_intent": "contact",
+          "expect_academic_enriched": true,
+          "response_must_include": ["+52 999 453 8421"],
+          "no_menu": true
+        },
+        {
+          "id": "A5",
+          "input": "Gracias",
+          "phone_suffix": "0105",
+          "expect_wa_intent": "agradecimiento",
+          "no_menu": true
+        }
+      ]
+    },
+    "B": {
+      "name": "Intents core",
+      "cases": [
+        {
+          "id": "B6",
+          "input": "No sé qué estudiar",
+          "phone_suffix": "0206",
+          "expect_wa_intent": "no_se_que_estudiar",
+          "expect_academic_skipped": true,
+          "response_must_include": ["test vocacional"],
+          "response_must_not_include": ["opciones oficiales"]
+        },
+        {
+          "id": "B7",
+          "input": "Quiero ver carreras",
+          "phone_suffix": "0207",
+          "expect_wa_intent": "carreras_disponibles",
+          "expect_academic_intent": "career_list",
+          "expect_academic_enriched": true,
+          "response_must_include": ["opciones oficiales", "Derecho"]
+        },
+        {
+          "id": "B8",
+          "input": "Tengo promedio 9.3, qué beca me toca",
+          "phone_suffix": "0208",
+          "expect_wa_intent": "beca",
+          "expect_academic_intent": "scholarship",
+          "expect_academic_enriched": true,
+          "response_must_include": ["50%"]
+        },
+        {
+          "id": "B9",
+          "input": "Quiero hablar con un asesor",
+          "phone_suffix": "0209",
+          "expect_wa_intent": "humano",
+          "expect_academic_skipped": true,
+          "response_must_include": ["canalizar con un asesor"]
+        },
+        {
+          "id": "B10",
+          "input": "Se trabó el test",
+          "phone_suffix": "0210",
+          "expect_wa_intent": "duda_test",
+          "expect_academic_skipped": true,
+          "response_must_include": ["test vocacional"]
+        }
+      ]
+    },
+    "C": {
+      "name": "Carrera específica / academic-engine",
+      "cases": [
+        {
+          "id": "C11",
+          "input": "Me interesa Derecho online",
+          "phone_suffix": "0311",
+          "expect_wa_intent": "carrera_interes",
+          "expect_academic_intent": "career_detail",
+          "expect_academic_enriched": true,
+          "response_must_include": ["Derecho", "línea"]
+        },
+        {
+          "id": "C12",
+          "input": "Enfermería presencial",
+          "phone_suffix": "0312",
+          "expect_wa_intent": "carrera_interes",
+          "expect_academic_intent": "career_detail",
+          "expect_academic_enriched": true,
+          "response_must_include": ["Enfermería", "Presencial"]
+        },
+        {
+          "id": "C13",
+          "input": "Psicología sabatina",
+          "phone_suffix": "0313",
+          "expect_wa_intents": ["carrera_interes", "fallback_inteligente"],
+          "expect_academic_enriched": true,
+          "response_must_include_any": ["Psicología", "modalidad", "Presencial"]
+        }
+      ]
+    },
+    "D": {
+      "name": "Multi-turn academic_state",
+      "phone": "+525559992000",
+      "turns": [
+        {
+          "id": "D1",
+          "input": "Me interesa Derecho online",
+          "expect_wa_intent": "carrera_interes",
+          "expect_academic_intent": "career_detail",
+          "expect_academic_enriched": true,
+          "response_must_include": ["Derecho"]
+        },
+        {
+          "id": "D2",
+          "input": "¿Cuánto cuesta?",
+          "expect_academic_enriched": true,
+          "response_must_include_any": ["$", "costo", "inscripción", "mensualidad", "precio"],
+          "response_must_not_include": ["opciones oficiales de Universidad Latino"],
+          "no_menu": true
+        },
+        {
+          "id": "D3",
+          "input": "¿Y cuánto dura?",
+          "expect_academic_enriched": true,
+          "response_must_include_any": ["año", "años", "semestre", "duración", "duracion"],
+          "response_must_not_include": ["opciones oficiales de Universidad Latino"],
+          "no_menu": true
+        }
+      ]
+    },
+    "E": {
+      "name": "Idempotencia + classifyIntent",
+      "phone": "+525559992001",
+      "message_id": "eng0c-idem-001",
+      "input": "No sé qué estudiar",
+      "expect_wa_intent_first": "no_se_que_estudiar",
+      "expect_first_skipped": false,
+      "expect_replay_skipped": true,
+      "expect_replay_idempotent": true,
+      "expect_replay_reason": "duplicate_ycloud_message_id"
+    }
+  }
+}
