@@ -23,6 +23,7 @@ for (const [key, value] of Object.entries({
   ANON_KEY: "mock-anon-key",
   FF_NOT_OFFERED: "false",
   FF_FALLBACKS: "false",
+  FF_ESCALATION_V2: "false",
 })) {
   process.env[key] = value;
 }

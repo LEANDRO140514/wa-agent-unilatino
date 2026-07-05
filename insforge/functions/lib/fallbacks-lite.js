@@ -186,6 +186,7 @@ function buildLevel3Decision(contactContext = {}) {
     needsHuman: true,
     createTask: true,
     ghl_tags: ["eva-wa", "wa_low_confidence", "wa_requiere_asesor"],
+    escalation_reason: "low_confidence",
     last_fallback_level: 3,
   });
 }

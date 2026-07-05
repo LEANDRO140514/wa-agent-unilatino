@@ -177,6 +177,8 @@ function buildNotOfferedDecision({
     requested_career_raw: literal,
     not_offered_id: demand?.id || (isUnknown ? "unknown" : null),
     not_offered_unknown: isUnknown,
+    not_offered_insistence: insistenceHuman,
+    escalation_reason: insistenceHuman ? "career_not_offered_help" : undefined,
     ghl_tags: buildDemandTags({ isUnknown, insistenceHuman }),
     ghl_note: buildDemandRegistrationNote(literal, demand?.id || null, isUnknown),
     demand_note_key: literal.toLowerCase(),
@@ -290,7 +292,33 @@ function trackInsistence(academicState, demandKey) {
   return counts;
 }
 
+function matchesEnrollmentSignal(rawText) {
+  const n = normalizeInput(rawText);
+  return [
+    "quiero inscribirme",
+    "quiero inscribir",
+    "listo para inscribir",
+    "listo para inscribirme",
+  ].some((p) => n.includes(normalizeInput(p)));
+}
+
+function matchesBecaSignal(rawText) {
+  const n = normalizeInput(rawText);
+  return [
+    "beca",
+    "promedio",
+    "descuento",
+    "apoyo economico",
+    "apoyo económico",
+    "promociones",
+    "promocion",
+  ].some((p) => n.includes(normalizeInput(p)));
+}
+
 function detectUnknownCareer(rawText) {
+  if (matchesEnrollmentSignal(rawText) || matchesBecaSignal(rawText)) {
+    return null;
+  }
   const token = extractCareerToken(rawText);
   if (!token) return null;
   if (matchExactOfferedCareer(token)) return null;

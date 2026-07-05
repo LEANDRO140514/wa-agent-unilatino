@@ -39,6 +39,7 @@ for (const [key, value] of Object.entries({
   EVA_LLM_ENABLED: "false",
   FF_NOT_OFFERED: "false",
   FF_FALLBACKS: "false",
+  FF_ESCALATION_V2: "false",
   INSFORGE_BASE_URL: "http://mock-insforge.local",
   ANON_KEY: "mock-anon-key",
 })) {

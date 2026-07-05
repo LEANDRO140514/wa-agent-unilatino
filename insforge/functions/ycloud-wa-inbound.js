@@ -180,6 +180,7 @@ function getConfig() {
     ffFsm: Deno.env.get("FF_FSM") !== "false",
     ffNotOffered: Deno.env.get("FF_NOT_OFFERED") !== "false",
     ffFallbacks: Deno.env.get("FF_FALLBACKS") !== "false",
+    ffEscalationV2: Deno.env.get("FF_ESCALATION_V2") !== "false",
   };
 }
 
@@ -1013,6 +1014,7 @@ function getTaskTitle(intent) {
 }
 
 function resolveGhlTaskTitle(context) {
+  if (context.escalation_payload?.taskTitle) return context.escalation_payload.taskTitle;
   if (context.task_title) return context.task_title;
   const fromIntent = getTaskTitle(context.intent);
   if (fromIntent) return fromIntent;
@@ -1050,6 +1052,7 @@ function buildOperationalWaSummary(decision, messageText) {
 }
 
 function shouldCreateTaskDryRun(context) {
+  if (context.ghl_skip_task === true) return false;
   if (context.createTask === false) return false;
   if (context.ghlSyncGovernedByGate === true) {
     return context.ghlWouldCreateTask === true;
@@ -1293,6 +1296,8 @@ async function syncGHLContactDryRun(client, config, context) {
         custom_fields_ghl_api_shape_preview: dryRun.custom_fields_ghl_api_shape_preview,
         operational: dryRun.operational,
         task_title: dryRun.task_title,
+        escalation_reason: context.escalation_reason || null,
+        escalation_dedupe_key: context.escalation_dedupe_key || null,
         ...buildGhlAllowlistPayloadMeta(allowlist),
       },
       protected_fields: {
@@ -1463,6 +1468,7 @@ async function updateGHLContactCustomFields(config, contactId, customFieldsArray
 
 function shouldCreateTaskLive(contextOrIntent) {
   if (contextOrIntent && typeof contextOrIntent === "object") {
+    if (contextOrIntent.ghl_skip_task === true) return false;
     if (contextOrIntent.createTask === false) return false;
     if (contextOrIntent.ghlSyncGovernedByGate === true) {
       return contextOrIntent.ghlWouldCreateTask === true;
@@ -1987,6 +1993,15 @@ function matchesPostTest(text, hasAny) {
   return completion && testRelated;
 }
 
+function matchesReadyToEnroll(text, hasAny) {
+  return hasAny([
+    "quiero inscribirme",
+    "quiero inscribir",
+    "listo para inscribir",
+    "listo para inscribirme",
+  ]);
+}
+
 function matchesHumano(text, hasAny) {
   return hasAny([
     "asesor",
@@ -2339,6 +2354,12 @@ function classifyIntent(rawText, config, contactContext = {}, catalogSot = null,
     return returnIntent("post_test", config, null, contactContext, catalogSot);
   }
 
+  if (matchesReadyToEnroll(text, hasAny)) {
+    return returnIntent("humano", config, null, contactContext, catalogSot, {
+      escalation_reason: "ready_to_enroll",
+    });
+  }
+
   if (matchesHumano(text, hasAny)) {
     return returnIntent("humano", config, null, contactContext, catalogSot);
   }
@@ -2430,6 +2451,7 @@ let _fsmLiteModule = null;
 let _notOfferedResolverModule = null;
 let _contextMemoryModule = null;
 let _fallbacksLiteModule = null;
+let _escalationPayloadModule = null;
 
 async function loadCatalogSotModule() {
   if (!_catalogSotModule) {
@@ -2471,6 +2493,13 @@ async function loadFallbacksLiteModule() {
     _fallbacksLiteModule = await import("./lib/fallbacks-lite.js");
   }
   return _fallbacksLiteModule;
+}
+
+async function loadEscalationPayloadModule() {
+  if (!_escalationPayloadModule) {
+    _escalationPayloadModule = await import("./lib/escalation-payload.js");
+  }
+  return _escalationPayloadModule;
 }
 
 function shouldPersistFsmState(decision, config) {
@@ -3397,6 +3426,70 @@ module.exports = async function handler(request) {
     }
 
     if (
+      config.ffEscalationV2 !== false &&
+      !ghlSuppressSideEffects &&
+      normalizedPhone
+    ) {
+      const escalation = await loadEscalationPayloadModule();
+
+      if (!escalation.shouldBlockEscalationInOpenHumano(contactContext, config)) {
+        const reason = escalation.resolveEscalationReason(enrichedDecision, {
+          academicState: enrichResult.academicState,
+          contactContext,
+        });
+
+        if (reason) {
+          const payload = escalation.buildEscalationPayload({
+            reason,
+            academicState: enrichResult.academicState,
+            decision: enrichedDecision,
+            nowIso,
+          });
+
+          if (payload) {
+            enrichedDecision = escalation.applyEscalationPayloadToDecision(
+              enrichedDecision,
+              payload,
+            );
+
+            const dayStart = escalation.getLocalDayStartIso(nowIso);
+            const { data: priorGhlLogs, error: priorGhlLogsError } = await client.database
+              .from("wa_ghl_sync_log")
+              .select(
+                "payload, created_at, normalized_phone, would_create_task, would_add_note",
+              )
+              .eq("normalized_phone", normalizedPhone)
+              .gte("created_at", dayStart);
+
+            if (!priorGhlLogsError && priorGhlLogs?.length) {
+              if (
+                escalation.shouldSkipEscalationTask(
+                  priorGhlLogs,
+                  enrichedDecision.escalation_dedupe_key,
+                )
+              ) {
+                enrichedDecision = {
+                  ...enrichedDecision,
+                  ghl_skip_task: true,
+                  escalation_task_deduped: true,
+                };
+              }
+              const noteText = enrichedDecision.ghl_note;
+              if (
+                noteText &&
+                escalation.shouldSkipEscalationNote(priorGhlLogs, noteText)
+              ) {
+                enrichedDecision = {
+                  ...enrichedDecision,
+                  ghl_skip_note: true,
+                  escalation_note_deduped: true,
+                };
+              }
+            }
+          }
+        }
+      }
+    } else if (
       !ghlSuppressSideEffects &&
       config.ffNotOffered !== false &&
       enrichedDecision.ghl_note &&
@@ -3595,6 +3688,9 @@ module.exports = async function handler(request) {
           ghl_tags_to_remove: enrichedDecision.ghl_tags_to_remove,
           ghl_note: enrichedDecision.ghl_note,
           ghl_skip_note: enrichedDecision.ghl_skip_note === true,
+          ghl_skip_task: enrichedDecision.ghl_skip_task === true,
+          escalation_reason: enrichedDecision.escalation_reason || null,
+          escalation_dedupe_key: enrichedDecision.escalation_dedupe_key || null,
         };
 
         if (ghlSyncAuth.shouldSync) {

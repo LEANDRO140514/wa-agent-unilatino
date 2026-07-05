@@ -27,6 +27,7 @@ const BASE_ENV = {
   FF_FSM: "true",
   FF_NOT_OFFERED: "true",
   FF_FALLBACKS: "true",
+  FF_ESCALATION_V2: "false",
 };
 
 for (const [key, value] of Object.entries(BASE_ENV)) {

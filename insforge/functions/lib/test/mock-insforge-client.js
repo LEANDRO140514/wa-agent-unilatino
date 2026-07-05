@@ -52,7 +52,12 @@ class QueryBuilder {
   }
 
   eq(column, value) {
-    this.filters.push({ column, value });
+    this.filters.push({ column, value, op: "eq" });
+    return this;
+  }
+
+  gte(column, value) {
+    this.filters.push({ column, value, op: "gte" });
     return this;
   }
 
@@ -130,7 +135,15 @@ class QueryBuilder {
       }
 
       let matched = rows.filter((row) =>
-        this.filters.every((f) => row[f.column] === f.value),
+        this.filters.every((f) => {
+          if (f.op === "gte") {
+            const rowVal = row[f.column];
+            const filterVal = f.value;
+            if (rowVal == null || filterVal == null) return false;
+            return String(rowVal) >= String(filterVal);
+          }
+          return row[f.column] === f.value;
+        }),
       );
       if (this.orderBy) {
         const { column, ascending } = this.orderBy;

@@ -3,7 +3,7 @@
 **Fecha:** 2026-07-04  
 **Alcance:** Portar reglas de negocio del Prompt Maestro v2.1 al motor actual (`ycloud-wa-inbound.js` + `academic-engine`).  
 **Fuera de alcance Fase 1:** Fable 5, RAG, clasificador LLM (Paso 0 spec v4.1), motor de síntesis §5 spec.  
-**Estado:** APROBADO 2026-07-04 — implementación en curso (ítems 0–5 ✅).
+**Estado:** APROBADO 2026-07-04 — **Fase 1 cerrada** (ítems 0–6 ✅).
 
 ---
 
@@ -17,7 +17,7 @@
 | 3 | FSM lite (D1) | `FF_FSM` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item3-fsm.mjs` 39/39 |
 | 4 | notOfferedResolver pipeline §11.1 completo | `FF_NOT_OFFERED` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item4-notoffered.mjs` 44/44 |
 | 5 | Fallbacks §12 + memoria (D23) | `FF_FALLBACKS` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item5-fallbacks.mjs` 18/18 |
-| 6 | EscalationPayload §13 + dedupe task | `FF_ESCALATION_V2` | Pendiente |
+| 6 | EscalationPayload §13 + dedupe task | `FF_ESCALATION_V2` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item6-escalation.mjs` 10/10 |
 
 **Nota:** Ítems 2–6 detrás de feature flags env. Ítems 0–1 sin flag (guardrail + idempotencia always-on).
 
@@ -33,7 +33,7 @@
 | 3. FSM LITE | **✅ Implementado** — `fsm-lite.js` + `closed_by_agent` + lazy reset TTL | — |
 | 4. Matriz §11 NO OFERTADAS | **✅ Implementado** — `notOfferedResolver.js` + matriz N1 + plantilla 8 pasos | — |
 | 5. Fallbacks §12 | **✅ Implementado** — `fallbacks-lite.js` + `context-memory.js` + columna `fallback_count` | — |
-| 6. Escalación §13 v2 | **Parcial** | `EscalationPayload` + dedupe task/día |
+| 6. Escalación §13 v2 | **✅ Implementado** — `escalation-payload.js` + dedupe `(phone, reason, día Merida)` | — |
 
 **Suite de tests §16 aplicable a Fase 1:** T01–T08, T11–T17, T20–T24, T27 + replay webhook duplicado.  
 **Tests existentes relacionados:** `tests/run-phase-eng-0b-idempotency.mjs` (T15 parcial), `tests/run-phase-eng-0c-classify-intent-replay.mjs` (regresión intents, no maestro).
@@ -397,14 +397,28 @@ Configurar en GoHighLevel la **exclusión por tag `wa_no_contact`** en workflows
 
 ### 6. Escalación §13 + side effects §14 (T11, T12, T22)
 
-**Hoy:**
-- `needsHuman` + `createTask` en matrix intents
-- `EVA_INTENT_TASK_TITLES` — 7 títulos fijos
-- `enrichDecisionWithOperational` — priority/escalation_required
-- **Sin** enum `reason` §13.2 (15 valores)
-- **Sin** dedupe task `(contactId, reason, día)`
+**Hoy (ítem 6 ✅):**
+- `insforge/functions/lib/escalation-payload.js` — builder §13.2 (15 `reason` enum), nota desde `academic_state`, tags/taskTitle/priority maestro
+- Dedupe task: clave `(normalized_phone, reason, día calendario)` con zona **`America/Merida` (UTC-6 fijo)** — no UTC
+- Query dedupe `wa_ghl_sync_log`: `created_at >= getLocalDayStartIso(now)` + `normalized_phone` (solo logs del día local, no historial completo del teléfono)
+- Dedupe note: misma nota textual el mismo día local Merida
+- `FF_ESCALATION_V2` default **on**; `false` → títulos/tags legacy (`EVA_INTENT_TASK_TITLES`)
+- F5 preservado: HUMANO abierto (`contactContext.fsm_state` al inicio del turno) → cero tasks
 
-**Mapeo parcial intent → reason:**
+**Cableado P2 (wired en código; resto enum documentado PENDIENTE Fase 2):**
+
+| reason §13.2 | Trigger determinístico actual |
+|---|---|
+| `human_requested` | `intent === "humano"` sin tag `wa_low_confidence` |
+| `ready_to_enroll` | frases inscripción (`matchesReadyToEnroll`) → `escalation_reason` |
+| `low_confidence` | fallback nivel 3 / tag `wa_low_confidence` / `duda_test`+`post_test` con task |
+| `career_not_offered_help` | insistencia notOffered ≥2 (`not_offered_insistence`) |
+| `revalidation_case` | `revalidacion_estudios` + `needsHuman` |
+| `scholarship_special` | `beca`+task o `promociones_descuentos`+`needsHuman` |
+
+**PENDIENTE Fase 2 (enum en código, `wired: false`):** `payment_intent`, `urgent_lead`, `docs_incomplete`, `rvoe_sensitive`, `complaint`, `minor_case`, `parent_request`, `price_negotiation`, `appointment`, `wa_no_call` (P6 título).
+
+**Mapeo parcial intent → reason (histórico):**
 
 | Intent actual | reason §13.2 propuesto |
 |---|---|
@@ -610,11 +624,12 @@ Aditivo: flujos nuevos usan tags maestro; legacy se mantiene en sync existente h
 - [x] Ítem 4: notOfferedResolver §11.1 — `FF_NOT_OFFERED` default **on** — suite 44/44; T06 medicina 8 pasos + tags/note
 - [x] Ítem 3: FSM lite — `FF_FSM` + lazy reset TTL + precedencia NO_CONTACT — suite 39/39
 - [x] Ítem 5: Fallbacks §12 + memoria — `FF_FALLBACKS` default **on** — suite 18/18
-- [ ] Feature flags ítem 6: `FF_ESCALATION_V2` (default off); `FF_NO_CONTACT` / `FF_FSM` / `FF_NOT_OFFERED` / `FF_FALLBACKS` default **on**
+- [x] Ítem 6: EscalationPayload §13 — `FF_ESCALATION_V2` default **on** — suite 10/10; dedupe día **America/Merida**
+- [x] Feature flags: `FF_NO_CONTACT` / `FF_FSM` / `FF_NOT_OFFERED` / `FF_FALLBACKS` / `FF_ESCALATION_V2` default **on** (rollback vía env `=false`)
 - [x] Comportamiento legacy ítem 0 con `FF_NOT_OFFERED=false` (N11 + C08–C13)
 
 ---
 
 ## Próximo paso
 
-**Ítem 6:** EscalationPayload §13 + dedupe task (`FF_ESCALATION_V2`).
+**Fase 2:** reasons §13.2 no cableados, clasificador LLM, RAG, Fable 5 — ver `docs/migracion/cierre_fase1.md`.
