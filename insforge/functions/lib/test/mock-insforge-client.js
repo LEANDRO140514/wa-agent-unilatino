@@ -184,6 +184,27 @@ export function getMockInsforgeClient() {
   return { database: createDatabase() };
 }
 
+export function seedMockContact(row) {
+  const contact = {
+    id: row.id || nextId(),
+    created_at: row.created_at || new Date().toISOString(),
+    updated_at: row.updated_at || new Date().toISOString(),
+    closed_by_agent: false,
+    fsm_state: null,
+    academic_state: null,
+    ...clone(row),
+  };
+  const existingIdx = tables.wa_contacts_state.findIndex(
+    (r) => r.normalized_phone === contact.normalized_phone,
+  );
+  if (existingIdx >= 0) {
+    tables.wa_contacts_state[existingIdx] = contact;
+  } else {
+    tables.wa_contacts_state.push(contact);
+  }
+  return contact;
+}
+
 export function countMockErrorsSince(minutesAgo = 10) {
   const cutoff = Date.now() - minutesAgo * 60 * 1000;
   return tables.wa_errors.filter((row) => {

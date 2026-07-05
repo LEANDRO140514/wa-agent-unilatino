@@ -177,6 +177,7 @@ function getConfig() {
     metaAdsFirstMessageNoSync: Deno.env.get("META_ADS_FIRST_MESSAGE_NO_SYNC") !== "false",
     metaAdsRequireQualification: Deno.env.get("META_ADS_REQUIRE_QUALIFICATION") !== "false",
     ffNoContact: Deno.env.get("FF_NO_CONTACT") !== "false",
+    ffFsm: Deno.env.get("FF_FSM") !== "false",
   };
 }
 
@@ -1047,6 +1048,7 @@ function buildOperationalWaSummary(decision, messageText) {
 }
 
 function shouldCreateTaskDryRun(context) {
+  if (context.createTask === false) return false;
   if (context.ghlSyncGovernedByGate === true) {
     return context.ghlWouldCreateTask === true;
   }
@@ -1458,6 +1460,7 @@ async function updateGHLContactCustomFields(config, contactId, customFieldsArray
 
 function shouldCreateTaskLive(contextOrIntent) {
   if (contextOrIntent && typeof contextOrIntent === "object") {
+    if (contextOrIntent.createTask === false) return false;
     if (contextOrIntent.ghlSyncGovernedByGate === true) {
       return contextOrIntent.ghlWouldCreateTask === true;
     }
@@ -2414,6 +2417,7 @@ let _academicEngineModules = null;
 let _ghlRelevanceGateModule = null;
 let _catalogSotModule = null;
 let _optOutHandlerModule = null;
+let _fsmLiteModule = null;
 
 async function loadCatalogSotModule() {
   if (!_catalogSotModule) {
@@ -2427,6 +2431,27 @@ async function loadOptOutHandlerModule() {
     _optOutHandlerModule = await import("./lib/opt-out-handler.js");
   }
   return _optOutHandlerModule;
+}
+
+async function loadFsmLiteModule() {
+  if (!_fsmLiteModule) {
+    _fsmLiteModule = await import("./lib/fsm-lite.js");
+  }
+  return _fsmLiteModule;
+}
+
+function shouldPersistFsmState(decision, config) {
+  if (!Object.prototype.hasOwnProperty.call(decision, "fsm_state")) {
+    return Object.prototype.hasOwnProperty.call(decision, "closed_by_agent");
+  }
+  if (
+    decision.fsm_state === "NO_CONTACT" ||
+    decision.intent === "opt_out" ||
+    decision.intent === "re_opt_in"
+  ) {
+    return true;
+  }
+  return config.ffFsm !== false;
 }
 
 async function loadGhlRelevanceGateModule() {
@@ -2977,8 +3002,16 @@ async function upsertContactState(
     updated_at: nowIso,
   };
 
-  if (Object.prototype.hasOwnProperty.call(decision, "fsm_state")) {
-    contactPayload.fsm_state = decision.fsm_state;
+  if (shouldPersistFsmState(decision, config)) {
+    if (Object.prototype.hasOwnProperty.call(decision, "fsm_state")) {
+      contactPayload.fsm_state = decision.fsm_state;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(decision, "closed_by_agent")) {
+    contactPayload.closed_by_agent = decision.closed_by_agent;
+  } else if (config.ffFsm !== false && decision.fsm_state === "HUMANO") {
+    contactPayload.closed_by_agent = false;
   }
 
   if (!shouldUseAcademicStateRestDirect()) {
@@ -3145,28 +3178,47 @@ module.exports = async function handler(request) {
     }
 
     let contactContext = {};
+    let prevContact = null;
+    let fsmLazyResetApplied = false;
     // Memoria académica multi-turno: se lee al inicio y se reescribe al final en upsertContactState.
     let academicState = {};
     if (normalizedPhone) {
-      const { data: prevContact, error: prevContactError } = await client.database
+      const { data: loadedContact, error: prevContactError } = await client.database
         .from("wa_contacts_state")
-        .select("wa_stage, wa_last_intent, wa_needs_human, academic_state, fsm_state")
+        .select(
+          "wa_stage, wa_last_intent, wa_needs_human, academic_state, fsm_state, closed_by_agent, updated_at",
+        )
         .eq("normalized_phone", normalizedPhone)
         .maybeSingle();
       throwIfError(prevContactError, "Lookup wa_contacts_state for context");
+      prevContact = loadedContact || null;
       if (prevContact) {
         contactContext = {
           wa_stage: prevContact.wa_stage,
           wa_last_intent: prevContact.wa_last_intent,
           wa_needs_human: prevContact.wa_needs_human,
           fsm_state: prevContact.fsm_state || null,
+          closed_by_agent: prevContact.closed_by_agent === true,
+          updated_at: prevContact.updated_at || null,
         };
+      }
+      if (config.ffFsm !== false && prevContact) {
+        const fsm = await loadFsmLiteModule();
+        const lazyReset = fsm.evaluateLazyHumanReset(prevContact, nowIso);
+        if (lazyReset) {
+          fsmLazyResetApplied = true;
+          contactContext = { ...contactContext, ...lazyReset.contactContextPatch };
+        }
       }
       // ENG-0A-bis: RPC SDK evita schema cache del SDK y HTTP 508 loop en edge.
       if (shouldUseAcademicStateRestDirect()) {
         academicState = await readContactAcademicStateDirect(normalizedPhone, client);
       } else if (prevContact) {
         academicState = parseAcademicStateFromContact(prevContact.academic_state);
+      }
+      if (fsmLazyResetApplied && config.ffFsm !== false) {
+        const fsm = await loadFsmLiteModule();
+        academicState = fsm.mergeAcademicStatePatch(academicState, { fallback_count: 0 });
       }
     }
 
@@ -3210,7 +3262,20 @@ module.exports = async function handler(request) {
       config,
       academicState,
     );
-    const enrichedDecision = enrichResult.decision;
+    let enrichedDecision = enrichResult.decision;
+
+    if (config.ffFsm !== false) {
+      const fsm = await loadFsmLiteModule();
+      enrichedDecision = fsm.applyHumanoBehaviorGate(enrichedDecision, contactContext, config);
+      const fsmPatch = fsm.computeFsmTransition({
+        contactContext,
+        decision: enrichedDecision,
+        isNewContact: !prevContact,
+        lazyResetApplied: fsmLazyResetApplied,
+        config,
+      });
+      enrichedDecision = fsm.mergeFsmPatchIntoDecision(enrichedDecision, fsmPatch);
+    }
 
     try {
       maybeLogCagShadow({
@@ -3367,6 +3432,7 @@ module.exports = async function handler(request) {
           messageText: parsed.message_text,
           messageType: parsed.message_type,
           needsHuman: enrichedDecision.needsHuman,
+          createTask: enrichedDecision.createTask,
           responseText: enrichedDecision.responseText,
           waStage: enrichedDecision.waStage,
           waSummary: enrichedDecision.waSummary,

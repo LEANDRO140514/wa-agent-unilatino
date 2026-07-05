@@ -3,7 +3,7 @@
 **Fecha:** 2026-07-04  
 **Alcance:** Portar reglas de negocio del Prompt Maestro v2.1 al motor actual (`ycloud-wa-inbound.js` + `academic-engine`).  
 **Fuera de alcance Fase 1:** Fable 5, RAG, clasificador LLM (Paso 0 spec v4.1), motor de síntesis §5 spec.  
-**Estado:** APROBADO 2026-07-04 — implementación en curso (ítems 0–2 ✅).
+**Estado:** APROBADO 2026-07-04 — implementación en curso (ítems 0–3 ✅).
 
 ---
 
@@ -14,7 +14,7 @@
 | 0 | Fix D4 catálogo SoT + matriz demanda §11 (5 fantasmas + Medicina) | — (always-on) | **✅ Done** — `tests/run-phase-fase1-item0-catalog-sot.mjs` 30/30 |
 | 1 | Verificar idempotencia ENG-0B (replay, cero side effects) | always-on | **✅ Done** — insert-first + `tests/run-phase-fase1-item1-idempotency.mjs` 23/23 |
 | 2 | OPT-OUT / NO_CONTACT (D22) | `FF_NO_CONTACT` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item2-optout.mjs` 25/25 |
-| 3 | FSM lite (D1) | `FF_FSM` | Pendiente |
+| 3 | FSM lite (D1) | `FF_FSM` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item3-fsm.mjs` 39/39 |
 | 4 | notOfferedResolver pipeline §11.1 completo | `FF_NOT_OFFERED` | Pendiente |
 | 5 | Fallbacks §12 + memoria (D23) | parte de FSM/fallbacks | Pendiente |
 | 6 | EscalationPayload §13 + dedupe task | `FF_ESCALATION_V2` | Pendiente |
@@ -30,7 +30,7 @@
 | 0. Catálogo §4.1 (D4) | **✅ Corregido** — `catalog-sot.js` | — |
 | 1. Idempotencia E1 | **✅ Verificado** — `claimInboundMessageForProcessing` insert-first | — |
 | 2. OPT-OUT / NO_CONTACT | **✅ Implementado** — `opt-out-handler.js` + `fsm_state` | — |
-| 3. FSM LITE | **Ausente** | Columnas aditivas + `fsm_state`; `wa_stage` convive |
+| 3. FSM LITE | **✅ Implementado** — `fsm-lite.js` + `closed_by_agent` + lazy reset TTL | — |
 | 4. Matriz §11 NO OFERTADAS | **Parcial** — demanda esperada en ítem 0; pipeline §11.1 ítem 4 | `FF_NOT_OFFERED` |
 | 5. Fallbacks §12 | **Parcial** | `fallback_count`, niveles 1–3, D23 |
 | 6. Escalación §13 v2 | **Parcial** | `EscalationPayload` + dedupe task/día |
@@ -137,7 +137,7 @@ Además FSM / fallbacks:
 |---|---|---|
 | `fallback_count` | §12, spec E2 | **Ausente** |
 | `closed_by_agent` | Spec E2 | **Ausente** |
-| FSM `current_state` | §10 + spec: SALUDO_INICIAL \| CONSULTA \| HUMANO \| NO_CONTACT | **Parcial** — columna `fsm_state` (ítem 2 escribe `NO_CONTACT`; backfill ítem 3) |
+| FSM `current_state` | §10 + spec: SALUDO_INICIAL \| CONSULTA \| HUMANO \| NO_CONTACT | **✅ Ítem 3** — `fsm-lite.js` + `closed_by_agent` + lazy reset TTL |
 | `no_contact` flag | §10, D22 | **✅ Ítem 2** — `fsm_state='NO_CONTACT'` (sin booleano paralelo) |
 | Lead states (`career_interest`, `price_interest`, …) | §10 | **No modelados** — inferibles desde `wa_stage` parcialmente |
 
@@ -295,20 +295,30 @@ Configurar en GoHighLevel la **exclusión por tag `wa_no_contact`** en workflows
 
 `tests/run-phase-fase1-item2-optout.mjs` — **25/25 PASS** (7 escenarios: explícita, negativos, ambigua+sí/no, reactivo NO_CONTACT, re-opt-in, replay idempotente, flag off).
 
-### 3. FSM LITE (spec E2)
+### 3. FSM LITE (spec E2) ✅ IMPLEMENTADO (ítem 3)
 
-**Hoy:** `wa_stage` = string operativo por intent (20+ valores distintos).
+**Módulo:** `insforge/functions/lib/fsm-lite.js`  
+**Flag:** `FF_FSM` — default **true** (`!== "false"`); `false` deja `wa_stage` legacy sin transiciones FSM.  
+**Migración:** `insforge/sql/wa_contacts_state_fsm_fase1_item3.sql` — `closed_by_agent` + backfill `wa_stage` → `fsm_state` (filas `NO_CONTACT` intactas).
 
-**Requerido:**
+#### Decisiones F1–F6 (implementadas)
 
-| Estado FSM | Entrada | Salida típica |
+| ID | Decisión | Implementación |
 |---|---|---|
-| `SALUDO_INICIAL` | Primer contacto | `CONSULTA` |
-| `CONSULTA` | Intents informativos | `HUMANO` si escalación |
-| `HUMANO` | Escalación §13 | Permanece; `closed_by_agent=false` al entrar |
-| `NO_CONTACT` | Opt-out D22 | Terminal proactivos |
+| F1 | Estados + backfill | `SALUDO_INICIAL \| CONSULTA \| HUMANO \| NO_CONTACT`; mapeo gap D1; desconocidos → `CONSULTA` (RAISE NOTICE en SQL) |
+| F2 | Precedencia NO_CONTACT | `computeFsmTransition` no escribe si `fsm_state=NO_CONTACT`; solo re-opt-in ítem 2 limpia |
+| F3 | Transiciones | Nuevo → `CONSULTA` tras 1er turno; `needsHuman` → `HUMANO` + `closed_by_agent=false`; bot nunca sale de HUMANO por contenido |
+| F4 | Reset TTL lazy | Inbound: `HUMANO` + `closed_by_agent=true` + `updated_at` >24h → `SALUDO_INICIAL`/`CONSULTA`, `closed_by_agent=false`, `fallback_count=0` en academic_state |
+| F5 | Comportamiento HUMANO | `applyHumanoBehaviorGate`: sin re-escalación/tasks si ya en HUMANO abierto |
+| F6 | Feature flag | `FF_FSM` default on; opt-out sigue con `FF_NO_CONTACT` independiente |
 
-**E2:** reset TTL 24h solo si `HUMANO` + `closed_by_agent=true`. **No implementar cron en Fase 1** — solo reglas de escritura; cron documentado como Fase 2 ops.
+**Reset lazy (F4):** equivalente funcional del cron spec §2 — solo ocurre cuando el usuario escribe de nuevo; InsForge no garantiza scheduler.
+
+#### Tests
+
+`tests/run-phase-fase1-item3-fsm.mjs` — **39/39 PASS** (backfill, transiciones, lazy reset, precedencia, replay, flag off).
+
+**Hoy (referencia histórica):** `wa_stage` operativo por intent — sigue escribiéndose en paralelo (D1 rollback).
 
 ---
 
@@ -558,11 +568,12 @@ Aditivo: flujos nuevos usan tags maestro; legacy se mantiene en sync existente h
 - [x] Opt-out T14: `NO_CONTACT` persistente + bloqueo side effects reactivos + tag CRM
 - [ ] **OPS:** Exclusión GHL por tag `wa_no_contact` en campañas/workflows (O5)
 - [ ] "Quiero medicina" T06: tags/note demanda (side effects ítem 4)
-- [ ] Feature flags ítems 3–6: `FF_FSM`, `FF_NOT_OFFERED`, `FF_ESCALATION_V2` (default off); `FF_NO_CONTACT` default **on**
+- [x] Ítem 3: FSM lite — `FF_FSM` + lazy reset TTL + precedencia NO_CONTACT — suite 39/39
+- [ ] Feature flags ítems 4–6: `FF_NOT_OFFERED`, `FF_ESCALATION_V2` (default off); `FF_NO_CONTACT` / `FF_FSM` default **on**
 - [ ] Comportamiento legacy intacto con flags OFF
 
 ---
 
 ## Próximo paso
 
-**Ítem 3:** FSM lite — backfill `wa_stage` → `fsm_state` (`FF_FSM`); columnas adicionales `closed_by_agent`, `fallback_count` en JSON/academic_state según D1.
+**Ítem 4:** `notOfferedResolver.js` — pipeline §11.1 completo (`FF_NOT_OFFERED`).

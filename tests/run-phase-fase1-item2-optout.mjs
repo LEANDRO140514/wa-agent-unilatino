@@ -22,6 +22,7 @@ const BASE_ENV = {
   INSFORGE_BASE_URL: "http://mock-insforge.local",
   ANON_KEY: "mock-anon-key",
   FF_NO_CONTACT: "true",
+  FF_FSM: "false",
 };
 
 for (const [key, value] of Object.entries(BASE_ENV)) {
