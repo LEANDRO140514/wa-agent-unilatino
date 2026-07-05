@@ -2730,18 +2730,46 @@ function buildIdempotentWebhookResponse(config, ycloudMessageId, existingInbound
   });
 }
 
-async function tryIdempotentEarlyReturn(client, config, ycloudMessageId) {
-  if (!ycloudMessageId) return null;
-  const existing = await findExistingInboundByYcloudMessageId(client, ycloudMessageId);
-  if (!existing) return null;
-  return buildIdempotentWebhookResponse(config, ycloudMessageId, existing);
-}
+async function claimInboundMessageForProcessing(
+  client,
+  config,
+  { ycloudMessageId, parsed, payload, normalizedPhone, nowIso },
+) {
+  const { data: inboundRows, error: inboundError } = await client.database
+    .from("wa_inbound_messages")
+    .insert({
+      ycloud_message_id: ycloudMessageId,
+      from_phone: parsed.from || null,
+      to_phone: parsed.to || null,
+      normalized_phone: normalizedPhone || parsed.from || null,
+      message_type: parsed.message_type || "unknown",
+      message_text: parsed.message_text,
+      raw_payload: payload,
+      received_at: parsed.timestamp || nowIso,
+      processed_at: nowIso,
+      status:
+        config.mode === "live_outbound"
+          ? "processed_inbound_live"
+          : "processed_inbound_mock",
+    })
+    .select("id")
+    .limit(1);
 
-async function handleInboundInsertUniqueRace(client, config, ycloudMessageId, inboundError) {
-  if (!ycloudMessageId || !isUniqueViolationError(inboundError)) return null;
-  const existing = await findExistingInboundByYcloudMessageId(client, ycloudMessageId);
-  if (!existing) return null;
-  return buildIdempotentWebhookResponse(config, ycloudMessageId, existing);
+  if (inboundError && ycloudMessageId && isUniqueViolationError(inboundError)) {
+    const existing = await findExistingInboundByYcloudMessageId(client, ycloudMessageId);
+    return {
+      claimed: false,
+      inboundId: existing?.id || null,
+      response: buildIdempotentWebhookResponse(config, ycloudMessageId, existing),
+    };
+  }
+
+  throwIfError(inboundError, "Insert wa_inbound_messages");
+  return {
+    claimed: true,
+    inboundId: inboundRows?.[0]?.id || null,
+    response: null,
+  };
 }
 
 const ACADEMIC_STATE_KEYS = [
@@ -3059,6 +3087,18 @@ module.exports = async function handler(request) {
     const client = await getClient();
     const ycloudMessageId = resolveYcloudMessageId(parsed);
 
+    const claim = await claimInboundMessageForProcessing(client, config, {
+      ycloudMessageId,
+      parsed,
+      payload,
+      normalizedPhone,
+      nowIso,
+    });
+    if (!claim.claimed) {
+      return claim.response;
+    }
+    inboundId = claim.inboundId;
+
     if (!normalizedPhone) {
       await logWarning(client, {
         error_type: "phone_normalization_failed",
@@ -3074,42 +3114,7 @@ module.exports = async function handler(request) {
         error_message: "missing_ycloud_message_id; idempotency skipped",
         raw_context: { event_type: parsed.event_type },
       });
-    } else {
-      const idempotentResponse = await tryIdempotentEarlyReturn(client, config, ycloudMessageId);
-      if (idempotentResponse) return idempotentResponse;
     }
-
-    const { data: inboundRows, error: inboundError } = await client.database
-      .from("wa_inbound_messages")
-      .insert({
-        ycloud_message_id: ycloudMessageId,
-        from_phone: parsed.from || null,
-        to_phone: parsed.to || null,
-        normalized_phone: normalizedPhone || parsed.from || null,
-        message_type: parsed.message_type || "unknown",
-        message_text: parsed.message_text,
-        raw_payload: payload,
-        received_at: parsed.timestamp || nowIso,
-        processed_at: nowIso,
-        status:
-          config.mode === "live_outbound"
-            ? "processed_inbound_live"
-            : "processed_inbound_mock",
-      })
-      .select("id")
-      .limit(1);
-
-    if (inboundError) {
-      const raceResponse = await handleInboundInsertUniqueRace(
-        client,
-        config,
-        ycloudMessageId,
-        inboundError,
-      );
-      if (raceResponse) return raceResponse;
-    }
-    throwIfError(inboundError, "Insert wa_inbound_messages");
-    inboundId = inboundRows?.[0]?.id || null;
 
     let contactContext = {};
     // Memoria académica multi-turno: se lee al inicio y se reescribe al final en upsertContactState.

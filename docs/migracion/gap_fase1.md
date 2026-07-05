@@ -12,7 +12,7 @@
 | # | Ítem | Flag | Estado |
 |---|---|---|---|
 | 0 | Fix D4 catálogo SoT + matriz demanda §11 (5 fantasmas + Medicina) | — (always-on) | **✅ Done** — `tests/run-phase-fase1-item0-catalog-sot.mjs` 30/30 |
-| 1 | Verificar idempotencia ENG-0B (replay, cero side effects) | always-on | Pendiente |
+| 1 | Verificar idempotencia ENG-0B (replay, cero side effects) | always-on | **✅ Done** — insert-first + `tests/run-phase-fase1-item1-idempotency.mjs` 23/23 |
 | 2 | OPT-OUT / NO_CONTACT (D22) | `FF_FSM`? → `FF_OPT_OUT` implícito en ítem 2 | Pendiente |
 | 3 | FSM lite (D1) | `FF_FSM` | Pendiente |
 | 4 | notOfferedResolver pipeline §11.1 completo | `FF_NOT_OFFERED` | Pendiente |
@@ -28,7 +28,7 @@
 | Ítem Fase 1 | Estado actual | Gap principal |
 |---|---|---|
 | 0. Catálogo §4.1 (D4) | **✅ Corregido** — `catalog-sot.js` | — |
-| 1. Idempotencia E1 | **ENG-0B always-on** — verificar replay completo | Test replay GHL/outbound pendiente (ítem 1) |
+| 1. Idempotencia E1 | **✅ Verificado** — `claimInboundMessageForProcessing` insert-first | — |
 | 2. OPT-OUT / NO_CONTACT | **Ausente** | Matcher D22 + `no_contact` + tag `wa_no_contact` |
 | 3. FSM LITE | **Ausente** | Columnas aditivas + `fsm_state`; `wa_stage` convive |
 | 4. Matriz §11 NO OFERTADAS | **Parcial** — demanda esperada en ítem 0; pipeline §11.1 ítem 4 | `FF_NOT_OFFERED` |
@@ -402,10 +402,58 @@ flowchart TD
 
 ---
 
-### D2 — Idempotencia: always-on ✅ RESUELTO
+### D2 — Idempotencia: always-on ✅ RESUELTO + VERIFICADO (ítem 1)
 
 - **No** `FF_IDEMPOTENCY` — ENG-0B permanece always-on (apagarla = side effects duplicados).
-- Ítem 1 = **verificar** con test replay real: aborta respuesta **y** side effects GHL/outbound/contact.
+- Fix: `claimInboundMessageForProcessing` — INSERT primero; unique violation → abort idempotente.
+- Test: `tests/run-phase-fase1-item1-idempotency.mjs` — **23/23 PASS**; ENG-0B 4/4; ENG-0C 17/17.
+- Auditoría V1/V2: [sección siguiente](#auditoría-idempotencia-eng-0b-ítem-1).
+
+---
+
+## Auditoría idempotencia ENG-0B (ítem 1)
+
+### V1 — ¿Es atómica?
+
+**Estado previo (ENG-0B original): NO del todo.**
+
+| Aspecto | Implementación previa | Riesgo |
+|---|---|---|
+| Replay secuencial | `SELECT` en `tryIdempotentEarlyReturn` → abort antes del INSERT | OK para replay |
+| Carrera concurrente | Dos requests pasaban el `SELECT` vacío → ambos llegaban al INSERT | Mitigado por unique index + handler de carrera **después** del INSERT; side effects solo tras INSERT exitoso |
+| Patrón | SELECT-then-INSERT | No cumple contrato insert-first del maestro §14 / spec E1 |
+
+**Fix ítem 1:** `claimInboundMessageForProcessing()` — **INSERT es la primera escritura de negocio**. Si `23505` → `{skipped:true, idempotent:true, reason:"duplicate_ycloud_message_id"}` sin classifyIntent, outbound, GHL ni upsert contact.
+
+Equivalente semántico a `INSERT … ON CONFLICT DO NOTHING` + abort si no se reclama la fila.
+
+**Test concurrente:** `Promise.all` mismo `message_id` → 1 procesado + 1 idempotente; 1 inbound / 1 outbound / 1 ghl_log.
+
+### V2 — ¿En qué punto corre?
+
+**Orden post-fix:**
+
+```txt
+1. Parse JSON + validación firma YCloud
+2. Filtros non_inbound / own_business (sin DB)
+3. normalizePhoneMX (sin DB)
+4. getClient()
+5. ★ claimInboundMessageForProcessing (INSERT wa_inbound_messages) ★
+   └─ duplicate → return idempotent (FIN)
+6. logWarning phone / missing ycloud_message_id (solo si claimed)
+7. read wa_contacts_state → classifyIntent → outbound → upsert → GHL
+```
+
+**Escrituras antes del claim (documentadas, sin mover en ítem 1):**
+
+| Escritura | Cuándo | Impacto replay estándar |
+|---|---|---|
+| `wa_errors` firma YCloud | Header signature sin secret en mock | Ninguno si no hay header |
+| Early return filtros | non_inbound, own_business | N/A |
+
+**Movido después del claim:** warnings de teléfono y `missing_ycloud_message_id`.
+
+**Conclusión V2:** Pipeline de negocio cumple insert-first; side effects estrictamente post-claim.
 
 ---
 
@@ -484,6 +532,7 @@ Aditivo: flujos nuevos usan tags maestro; legacy se mantiene en sync existente h
 ## Criterio de cierre Fase 1 (recordatorio)
 
 - [x] Ítem 0: catálogo §4.1 + 5 fantasmas en matriz demanda — suite 30/30
+- [x] Ítem 1: idempotencia insert-first + replay sin side effects — suite 23/23; ENG-0B 4/4; ENG-0C 17/17
 - [ ] Suite T01–T08, T11–T17, T20–T24, T27 + replay duplicado **en verde**
 - [ ] Replay webhook: cero outbound, cero GHL, cero upsert contact en 2ª invocación
 - [ ] Opt-out T14: `no_contact` persistente + bloqueo proactivos
@@ -495,4 +544,4 @@ Aditivo: flujos nuevos usan tags maestro; legacy se mantiene en sync existente h
 
 ## Próximo paso
 
-**Ítem 1:** test replay idempotencia ENG-0B — verificar cero side effects GHL/outbound/contact.
+**Ítem 2:** OPT-OUT / NO_CONTACT (D22) — `FF_FSM` o flag dedicado; estado `no_contact` + tag `wa_no_contact`.
