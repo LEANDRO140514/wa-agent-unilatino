@@ -3,7 +3,7 @@
 **Fecha:** 2026-07-04  
 **Alcance:** Portar reglas de negocio del Prompt Maestro v2.1 al motor actual (`ycloud-wa-inbound.js` + `academic-engine`).  
 **Fuera de alcance Fase 1:** Fable 5, RAG, clasificador LLM (Paso 0 spec v4.1), motor de síntesis §5 spec.  
-**Estado:** APROBADO 2026-07-04 — implementación en curso (ítems 0–4 ✅).
+**Estado:** APROBADO 2026-07-04 — implementación en curso (ítems 0–5 ✅).
 
 ---
 
@@ -16,7 +16,7 @@
 | 2 | OPT-OUT / NO_CONTACT (D22) | `FF_NO_CONTACT` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item2-optout.mjs` 25/25 |
 | 3 | FSM lite (D1) | `FF_FSM` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item3-fsm.mjs` 39/39 |
 | 4 | notOfferedResolver pipeline §11.1 completo | `FF_NOT_OFFERED` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item4-notoffered.mjs` 44/44 |
-| 5 | Fallbacks §12 + memoria (D23) | parte de FSM/fallbacks | Pendiente |
+| 5 | Fallbacks §12 + memoria (D23) | `FF_FALLBACKS` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item5-fallbacks.mjs` 18/18 |
 | 6 | EscalationPayload §13 + dedupe task | `FF_ESCALATION_V2` | Pendiente |
 
 **Nota:** Ítems 2–6 detrás de feature flags env. Ítems 0–1 sin flag (guardrail + idempotencia always-on).
@@ -32,7 +32,7 @@
 | 2. OPT-OUT / NO_CONTACT | **✅ Implementado** — `opt-out-handler.js` + `fsm_state` | — |
 | 3. FSM LITE | **✅ Implementado** — `fsm-lite.js` + `closed_by_agent` + lazy reset TTL | — |
 | 4. Matriz §11 NO OFERTADAS | **✅ Implementado** — `notOfferedResolver.js` + matriz N1 + plantilla 8 pasos | — |
-| 5. Fallbacks §12 | **Parcial** | `fallback_count`, niveles 1–3, D23 |
+| 5. Fallbacks §12 | **✅ Implementado** — `fallbacks-lite.js` + `context-memory.js` + columna `fallback_count` | — |
 | 6. Escalación §13 v2 | **Parcial** | `EscalationPayload` + dedupe task/día |
 
 **Suite de tests §16 aplicable a Fase 1:** T01–T08, T11–T17, T20–T24, T27 + replay webhook duplicado.  
@@ -68,7 +68,7 @@ El maestro usa **camelCase inglés** en §5.1 (admisiones) + §5.2 (comerciales)
 | `agradecimiento` | `thanks` | — | OK |
 | `despedida` | `farewell` | — | OK |
 | `ambiguo` | `general_info` / fallback §12.1 | `general_interest` | Menú distinto al maestro §12.1 (4 opciones con emojis) |
-| `fallback_inteligente` | `smart_fallback` | `low_confidence` | Sin `fallback_count`; no niveles 2/3 |
+| `fallback_inteligente` | `smart_fallback` | `low_confidence` | **✅ Ítem 5** — niveles 1–3 + D23 (`FF_FALLBACKS`) |
 
 ### Intents Maestro §5 **sin equivalente directo** en classifier WA
 
@@ -363,9 +363,25 @@ Configurar en GoHighLevel la **exclusión por tag `wa_no_contact`** en workflows
 
 ---
 
-### 5. Fallbacks §12 (T03, T04, T20, T21, T16)
+### 5. Fallbacks §12 (T03, T04, T20, T21, T16) ✅
 
-**Hoy:**
+**Implementado (2026-07-05):**
+
+| Decisión | Detalle |
+|---|---|
+| B1 | `fallback_count INT` en `wa_contacts_state`; racha consecutiva; reset en intent reconocido + F4 lazy reset |
+| B2 | Nivel 1 menú ≤4 opciones; nivel 2 texto distinto; nivel 3 asesor + `wa_low_confidence` + FSM HUMANO |
+| B3 | D23: 2ª repetición → reformular; 3ª → nivel 3 |
+| B4 | Pregunta costo/duración/docs sin carrera → aclaración + `pending_attribute` |
+| B5 | Memoria §12.7 en `academic_state` + costos exactos §4.1 vía `catalog-sot` (handler mínimo D5) |
+| B6 | Precedencia: opt-out → notOffered → context-memory → classify → fallbacks |
+| B7 | `FF_FALLBACKS` default on; off → legacy `fallback_inteligente` + cero escrituras `fallback_count` |
+
+**Módulos:** `fallbacks-lite.js`, `context-memory.js`; SQL `wa_contacts_state_fallback_count_fase1_item5.sql`.
+
+**Tests:** `tests/run-phase-fase1-item5-fallbacks.mjs` — **18/18 PASS**; regresión ítems 0–4 en verde.
+
+**Hoy (referencia histórica):**
 - `ambiguo` → `EVA_AMBIGUO_MENU`
 - `fallback_inteligente` → texto genérico
 - `shouldShowAmbiguoMenu` usa historial `wa_stage`/`wa_last_intent`
@@ -593,11 +609,12 @@ Aditivo: flujos nuevos usan tags maestro; legacy se mantiene en sync existente h
 - [ ] **OPS:** Exclusión GHL por tag `wa_no_contact` en campañas/workflows (O5)
 - [x] Ítem 4: notOfferedResolver §11.1 — `FF_NOT_OFFERED` default **on** — suite 44/44; T06 medicina 8 pasos + tags/note
 - [x] Ítem 3: FSM lite — `FF_FSM` + lazy reset TTL + precedencia NO_CONTACT — suite 39/39
-- [ ] Feature flags ítems 5–6: `FF_ESCALATION_V2` (default off); `FF_NO_CONTACT` / `FF_FSM` / `FF_NOT_OFFERED` default **on**
+- [x] Ítem 5: Fallbacks §12 + memoria — `FF_FALLBACKS` default **on** — suite 18/18
+- [ ] Feature flags ítem 6: `FF_ESCALATION_V2` (default off); `FF_NO_CONTACT` / `FF_FSM` / `FF_NOT_OFFERED` / `FF_FALLBACKS` default **on**
 - [x] Comportamiento legacy ítem 0 con `FF_NOT_OFFERED=false` (N11 + C08–C13)
 
 ---
 
 ## Próximo paso
 
-**Ítem 5:** Fallbacks §12 + `fallback_count` (parte FSM/fallbacks, D23).
+**Ítem 6:** EscalationPayload §13 + dedupe task (`FF_ESCALATION_V2`).

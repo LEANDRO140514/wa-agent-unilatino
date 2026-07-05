@@ -22,6 +22,7 @@ for (const [key, value] of Object.entries({
   INSFORGE_BASE_URL: "http://mock-insforge.local",
   ANON_KEY: "mock-anon-key",
   FF_NOT_OFFERED: "false",
+  FF_FALLBACKS: "false",
 })) {
   process.env[key] = value;
 }

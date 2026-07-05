@@ -25,6 +25,7 @@ const BASE_ENV = {
   FF_NO_CONTACT: "true",
   FF_FSM: "true",
   FF_NOT_OFFERED: "false",
+  FF_FALLBACKS: "false",
 };
 
 for (const [key, value] of Object.entries(BASE_ENV)) {

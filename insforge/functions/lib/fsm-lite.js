@@ -112,10 +112,12 @@ export function evaluateLazyHumanReset(contactRow, nowIso) {
     contactContextPatch: {
       fsm_state: FSM_STATES.SALUDO_INICIAL,
       closed_by_agent: false,
+      fallback_count: 0,
     },
     persistPatch: {
       fsm_state: FSM_STATES.SALUDO_INICIAL,
       closed_by_agent: false,
+      fallback_count: 0,
     },
     academicStatePatch: { fallback_count: 0 },
   };

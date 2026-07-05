@@ -29,6 +29,8 @@ const BLOCKED_WA_INTENTS = new Set([
   "carrera_no_ofertada",
   "modalidad_invalida",
   "carrera_confirmacion",
+  "contexto_aclaracion",
+  "consulta_costo",
   "opt_out",
   "opt_out_confirmacion",
   "re_opt_in",

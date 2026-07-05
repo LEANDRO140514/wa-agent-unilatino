@@ -3,6 +3,7 @@
  * Única fuente de datos; el resolver no define listas propias.
  */
 import { getActiveCareers, getCatalogMeta } from "./truth.js";
+import { formatPrice } from "./responseBuilder.js";
 import { normalizeInput, includesAny, ONLINE_SYNONYMS, PRESENTIAL_SYNONYMS, SATURDAY_SYNONYMS } from "./normalizer.js";
 
 /** Nombres EXACTOS de las 12 licenciaturas §4.1 (orden estable por área + nombre). */
@@ -514,6 +515,34 @@ export function buildCarrerasDisponiblesResponseText() {
   );
 
   return lines.join("\n");
+}
+
+export function resolveCareerRecord({ careerName, programaBase, modalityCode = null } = {}) {
+  const careers = getActiveCareers();
+  const targetName = careerName || programaBase;
+  if (!targetName) return null;
+
+  const n = normalizeInput(targetName);
+  const matches = careers.filter(
+    (c) => normalizeInput(c.name) === n || normalizeInput(c.programa_base) === n,
+  );
+  if (modalityCode) {
+    const byMod = matches.find((c) => c.modality_code === modalityCode);
+    if (byMod) return byMod;
+  }
+  if (matches.length === 1) return matches[0];
+  const exactName = careers.find((c) => normalizeInput(c.name) === n);
+  if (exactName) return exactName;
+  return matches[0] || null;
+}
+
+export function buildCareerCostResponseText(careerRecord) {
+  if (!careerRecord) return null;
+  return (
+    `¡Claro! Sobre ${careerRecord.name} (${careerRecord.modality_label}):\n` +
+    `• Mensualidad: ${formatPrice(careerRecord.monthly_price)}\n` +
+    `• Inscripción: ${formatPrice(careerRecord.enrollment_price)}`
+  );
 }
 
 export const GHOST_CAREER_LABELS = [

@@ -5,6 +5,10 @@
 
 import { normalizeInput } from "./normalizer.js";
 import {
+  isDomainAmbiguousMessage,
+  isOutOfDomainMessage,
+} from "../fallbacks-lite.js";
+import {
   ADMIN_AMBIGUOUS_RULE,
   MODALITY_RULES_BY_PROGRAM,
   buildAdminAmbiguousQuestion,
@@ -21,6 +25,45 @@ import {
   matchExactOfferedCareer,
   matchesInvalidLevel,
 } from "./catalog-sot.js";
+
+const DEFER_ATTRIBUTE_FRAGMENTS = [
+  "cuanto cuesta",
+  "cuánto cuesta",
+  "precio",
+  "colegiatura",
+  "mensualidad",
+  "cuanto dura",
+  "cuánto dura",
+  "que documentos",
+  "qué documentos",
+  "cual me recomiendas",
+  "cuál me recomiendas",
+  "y esa cuanto cuesta",
+  "y esa cuánto cuesta",
+  "no entiendo",
+  "no te entendi",
+  "no te entendí",
+];
+
+function shouldDeferNotOffered(rawText, academicState = {}) {
+  if (detectExpectedNotOfferedDemand(rawText)) return false;
+  if (matchesInvalidLevel(rawText)) return false;
+  if (matchExactOfferedCareer(rawText)) return false;
+  if (matchCareerAlias(rawText)) return false;
+  if (matchAdminAmbiguous(rawText)) return false;
+
+  if (isDomainAmbiguousMessage(rawText) || isOutOfDomainMessage(rawText)) {
+    return true;
+  }
+  const n = normalizeInput(rawText);
+  if (DEFER_ATTRIBUTE_FRAGMENTS.some((f) => n.includes(normalizeInput(f)))) {
+    return true;
+  }
+  if (/^(y\s+)?(online|en linea|presencial|sabatina)\b/.test(n.trim()) && academicState?.current_career) {
+    return true;
+  }
+  return false;
+}
 
 const TYPO_MAX_DISTANCE = 2;
 const TYPO_MIN_WORD_LEN = 5;
@@ -281,6 +324,10 @@ export function resolveNotOfferedTurn({ rawText, academicState = {}, config = {}
   }
 
   if (!rawText || !String(rawText).trim()) {
+    return { action: "none" };
+  }
+
+  if (shouldDeferNotOffered(rawText, academicState)) {
     return { action: "none" };
   }
 

@@ -179,6 +179,7 @@ function getConfig() {
     ffNoContact: Deno.env.get("FF_NO_CONTACT") !== "false",
     ffFsm: Deno.env.get("FF_FSM") !== "false",
     ffNotOffered: Deno.env.get("FF_NOT_OFFERED") !== "false",
+    ffFallbacks: Deno.env.get("FF_FALLBACKS") !== "false",
   };
 }
 
@@ -2427,6 +2428,8 @@ let _catalogSotModule = null;
 let _optOutHandlerModule = null;
 let _fsmLiteModule = null;
 let _notOfferedResolverModule = null;
+let _contextMemoryModule = null;
+let _fallbacksLiteModule = null;
 
 async function loadCatalogSotModule() {
   if (!_catalogSotModule) {
@@ -2454,6 +2457,20 @@ async function loadNotOfferedResolverModule() {
     _notOfferedResolverModule = await import("./lib/academic-engine/notOfferedResolver.js");
   }
   return _notOfferedResolverModule;
+}
+
+async function loadContextMemoryModule() {
+  if (!_contextMemoryModule) {
+    _contextMemoryModule = await import("./lib/context-memory.js");
+  }
+  return _contextMemoryModule;
+}
+
+async function loadFallbacksLiteModule() {
+  if (!_fallbacksLiteModule) {
+    _fallbacksLiteModule = await import("./lib/fallbacks-lite.js");
+  }
+  return _fallbacksLiteModule;
 }
 
 function shouldPersistFsmState(decision, config) {
@@ -2843,6 +2860,13 @@ const ACADEMIC_STATE_KEYS = [
   "current_modality",
   "last_career",
   "last_question",
+  "pending_attribute",
+  "last_objection",
+  "last_fallback_level",
+  "last_user_inbound_normalized",
+  "user_inbound_repeat_count",
+  "last_outbound_text",
+  "fallback_count",
   "pending_opt_out_confirmation",
   "pending_career_confirmation",
   "not_offered_request_counts",
@@ -3033,6 +3057,14 @@ async function upsertContactState(
     contactPayload.closed_by_agent = false;
   }
 
+  if (config.ffFallbacks !== false && Object.prototype.hasOwnProperty.call(decision, "fallback_count")) {
+    contactPayload.fallback_count = Number(decision.fallback_count) || 0;
+  }
+
+  if (config.ffFallbacks !== false) {
+    contactPayload.wa_last_outbound_text = decision.responseText || null;
+  }
+
   if (!shouldUseAcademicStateRestDirect()) {
     contactPayload.academic_state = sanitizeAcademicStateForDb(academicState);
   }
@@ -3205,7 +3237,7 @@ module.exports = async function handler(request) {
       const { data: loadedContact, error: prevContactError } = await client.database
         .from("wa_contacts_state")
         .select(
-          "wa_stage, wa_last_intent, wa_needs_human, academic_state, fsm_state, closed_by_agent, updated_at",
+          "wa_stage, wa_last_intent, wa_needs_human, academic_state, fsm_state, closed_by_agent, updated_at, fallback_count, wa_last_outbound_text",
         )
         .eq("normalized_phone", normalizedPhone)
         .maybeSingle();
@@ -3238,7 +3270,17 @@ module.exports = async function handler(request) {
       if (fsmLazyResetApplied && config.ffFsm !== false) {
         const fsm = await loadFsmLiteModule();
         academicState = fsm.mergeAcademicStatePatch(academicState, { fallback_count: 0 });
+        contactContext.fallback_count = 0;
       }
+    }
+
+    let fallbackCount = 0;
+    if (fsmLazyResetApplied) {
+      fallbackCount = 0;
+    } else if (prevContact?.fallback_count != null) {
+      fallbackCount = Number(prevContact.fallback_count) || 0;
+    } else if (academicState?.fallback_count != null) {
+      fallbackCount = Number(academicState.fallback_count) || 0;
     }
 
     const catalogSot = await loadCatalogSotModule();
@@ -3288,10 +3330,46 @@ module.exports = async function handler(request) {
       }
     }
 
+    if (!decision && config.ffFallbacks !== false) {
+      const ctxMem = await loadContextMemoryModule();
+      const ctxTurn = ctxMem.resolveContextMemoryTurn({
+        rawText: parsed.message_text,
+        academicState,
+        catalogSot,
+        config,
+      });
+      academicState = ctxMem.mergeAcademicStatePatch(academicState, ctxTurn.academicStatePatch);
+
+      if (ctxTurn.action === "decision" && ctxTurn.decision) {
+        decision = enrichDecisionWithOperational(ctxTurn.decision);
+      }
+    }
+
     if (!decision) {
       decision = classifyIntent(parsed.message_text, config, contactContext, catalogSot, {
         skipNotOfferedPipeline: config.ffNotOffered !== false,
       });
+    }
+
+    if (config.ffFallbacks !== false) {
+      const fallbacks = await loadFallbacksLiteModule();
+      const lastOutboundText =
+        academicState?.last_outbound_text ||
+        prevContact?.wa_last_outbound_text ||
+        "";
+      const fbTurn = fallbacks.resolveFallbackTurn({
+        rawText: parsed.message_text,
+        decision,
+        fallbackCount,
+        academicState,
+        contactContext,
+        lastOutboundText,
+        config,
+      });
+      decision = enrichDecisionWithOperational(fbTurn.decision);
+      fallbackCount = fbTurn.fallbackCount;
+      academicState = fallbacks.mergeAcademicStatePatch(academicState, fbTurn.academicStatePatch);
+      decision.fallback_count = fallbackCount;
     }
 
     if (decision.ghlSuppress === true) {
