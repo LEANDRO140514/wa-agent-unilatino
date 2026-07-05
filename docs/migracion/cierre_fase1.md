@@ -28,40 +28,35 @@ Fase 1 porta reglas de negocio del Prompt Maestro al handler `ycloud-wa-inbound.
 
 ## Deploy checklist (InsForge)
 
-Ejecutar SQL en orden (si no aplicados en el entorno):
+Ejecutar SQL en orden **exacto** (si no aplicados en el entorno):
 
-1. `insforge/sql/wa_contacts_state_academic_state_rpc.sql` (ENG-0A-bis, si aplica)
-2. `insforge/sql/wa_contacts_state_fsm_state.sql` / ítem 2–3 FSM
-3. `insforge/sql/wa_contacts_state_fallback_count_fase1_item5.sql`
+1. `insforge/sql/wa_contacts_state_fsm_state.sql` — columna `fsm_state`
+2. `insforge/sql/wa_contacts_state_fsm_fase1_item3.sql` — `closed_by_agent` + backfill `wa_stage` → `fsm_state`
+3. `insforge/sql/wa_contacts_state_fallback_count_fase1_item5.sql` — columna `fallback_count`
+
+> Migraciones opcionales fuera de Fase 1 deploy: `wa_contacts_state_academic_state_rpc.sql` (ENG-0A-bis), `wa_contacts_state_academic_state.sql`.
 
 Desplegar edge function `ycloud-wa-inbound` tras validar dry_run.
 
-Variables de entorno recomendadas:
+### Feature flags Fase 1 — defaults
+
+Los cinco flags ítems 2–6 son **ON por defecto** (variable ausente o cualquier valor distinto de `"false"`).
+
+| Flag | Default | Efecto al `=false` |
+|---|---|---|
+| `FF_NO_CONTACT` | ON | Sin matcher opt-out / sin `NO_CONTACT` FSM |
+| `FF_FSM` | ON | Sin transiciones `fsm_state` ni gate HUMANO |
+| `FF_NOT_OFFERED` | ON | Pipeline §11.1 desactivado |
+| `FF_FALLBACKS` | ON | Sin niveles §12 / D23 |
+| `FF_ESCALATION_V2` | ON | Títulos/tags GHL legacy; sin `escalation_reason` en log |
+
+Variables adicionales recomendadas:
 
 | Variable | Valor recomendado Fase 1 |
 |---|---|
 | `GHL_SYNC_MODE` | `dry_run` hasta validación CRM; luego `live` con allowlist |
-| `FF_NO_CONTACT` | omitir o `true` |
-| `FF_FSM` | omitir o `true` |
-| `FF_NOT_OFFERED` | omitir o `true` |
-| `FF_FALLBACKS` | omitir o `true` |
-| `FF_ESCALATION_V2` | omitir o `true` |
 | `ACADEMIC_ENGINE_ENABLED` | según rollout enrichment |
 | `EVA_LLM_ENABLED` | `false` en Fase 1 |
-
----
-
-## Feature flags — rollback rápido
-
-Flags ítems 2–6: **default ON** si la variable no es `"false"`.
-
-| Flag | Efecto al `=false` |
-|---|---|
-| `FF_NO_CONTACT` | Sin matcher opt-out / sin `NO_CONTACT` FSM |
-| `FF_FSM` | Sin transiciones `fsm_state` ni gate HUMANO |
-| `FF_NOT_OFFERED` | Pipeline §11.1 desactivado |
-| `FF_FALLBACKS` | Sin niveles §12 / D23 |
-| `FF_ESCALATION_V2` | Títulos/tags GHL legacy; sin `escalation_reason` en log |
 
 Idempotencia (ítem 1): **always-on**, sin flag.
 
