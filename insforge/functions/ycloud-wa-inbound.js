@@ -98,6 +98,9 @@ const EVA_INTENT_OPERATIONAL = {
   agradecimiento: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
   despedida: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
   sin_texto: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
+  opt_out: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
+  opt_out_confirmacion: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
+  re_opt_in: { priority: "low", escalation_required: false, task_priority_label: "Baja" },
 };
 
 const EVA_PRESERVE_HUMAN_STAGES = new Set([
@@ -173,6 +176,7 @@ function getConfig() {
     ),
     metaAdsFirstMessageNoSync: Deno.env.get("META_ADS_FIRST_MESSAGE_NO_SYNC") !== "false",
     metaAdsRequireQualification: Deno.env.get("META_ADS_REQUIRE_QUALIFICATION") !== "false",
+    ffNoContact: Deno.env.get("FF_NO_CONTACT") !== "false",
   };
 }
 
@@ -929,6 +933,9 @@ const INTENT_TAG_MAP = {
   objecion_precio: "wa_objecion_precio",
   promociones_descuentos: "wa_interes_promocion",
   carrera_no_ofertada: "wa_carrera_no_ofertada",
+  opt_out: "wa_no_contact",
+  opt_out_confirmacion: "wa_interes_info",
+  re_opt_in: "wa_interes_info",
 };
 
 const INTENT_EXTRA_TAGS = {
@@ -939,6 +946,9 @@ const INTENT_EXTRA_TAGS = {
 };
 
 function getIntentTags(intent, context = {}) {
+  if (Array.isArray(context.ghl_tags) && context.ghl_tags.length > 0) {
+    return [...new Set(context.ghl_tags)];
+  }
   const tags = ["eva-wa", getIntentTag(intent)];
   const extras = INTENT_EXTRA_TAGS[intent] || [];
   for (const t of extras) tags.push(t);
@@ -1105,7 +1115,8 @@ function buildGHLDryRunPayload(context, existingGhlContactId, customFieldsState)
     : Boolean(existingGhlContactId);
   const includeNote = governed ? context.ghlWouldCreateNote === true : true;
   const note = includeNote
-    ? buildGHLNoteBody(context, `[Eva WA dry-run] ${context.timestamp}`)
+    ? context.ghl_note ||
+      buildGHLNoteBody(context, `[Eva WA dry-run] ${context.timestamp}`)
     : null;
 
   const waValues = buildWACustomFieldValues(context);
@@ -1172,6 +1183,7 @@ function buildGHLDryRunPayload(context, existingGhlContactId, customFieldsState)
     note,
     task: taskPayload,
     tags,
+    tags_to_remove: context.ghl_tags_to_remove || [],
     customFields,
     ghl_custom_fields_array: ghlCustomFieldsArray,
     operational,
@@ -1200,6 +1212,7 @@ function buildGHLDryRunPayload(context, existingGhlContactId, customFieldsState)
     would_update_contact: wouldUpdateContactFinal,
     would_create_task: Boolean(taskPayload),
     would_add_tags: tags,
+    would_remove_tags: context.ghl_tags_to_remove || [],
     would_add_note: note,
   };
 }
@@ -1263,6 +1276,7 @@ async function syncGHLContactDryRun(client, config, context) {
         note: dryRun.note,
         task: dryRun.task,
         tags: dryRun.tags,
+        tags_to_remove: dryRun.tags_to_remove || [],
         customFields: dryRun.customFields,
         custom_fields_config_loaded: dryRun.custom_fields_config_loaded,
         custom_fields_map_valid: dryRun.custom_fields_map_valid,
@@ -1285,6 +1299,7 @@ async function syncGHLContactDryRun(client, config, context) {
       would_update_contact: dryRun.would_update_contact,
       would_create_task: dryRun.would_create_task,
       would_add_tags: dryRun.would_add_tags,
+      would_remove_tags: dryRun.would_remove_tags || [],
       would_add_note: dryRun.would_add_note,
       status: "dry_run",
     })
@@ -2398,12 +2413,20 @@ function classifyIntent(rawText, config, contactContext = {}, catalogSot = null)
 let _academicEngineModules = null;
 let _ghlRelevanceGateModule = null;
 let _catalogSotModule = null;
+let _optOutHandlerModule = null;
 
 async function loadCatalogSotModule() {
   if (!_catalogSotModule) {
     _catalogSotModule = await import("./lib/academic-engine/catalog-sot.js");
   }
   return _catalogSotModule;
+}
+
+async function loadOptOutHandlerModule() {
+  if (!_optOutHandlerModule) {
+    _optOutHandlerModule = await import("./lib/opt-out-handler.js");
+  }
+  return _optOutHandlerModule;
 }
 
 async function loadGhlRelevanceGateModule() {
@@ -2779,6 +2802,7 @@ const ACADEMIC_STATE_KEYS = [
   "current_modality",
   "last_career",
   "last_question",
+  "pending_opt_out_confirmation",
 ];
 
 /**
@@ -2953,6 +2977,10 @@ async function upsertContactState(
     updated_at: nowIso,
   };
 
+  if (Object.prototype.hasOwnProperty.call(decision, "fsm_state")) {
+    contactPayload.fsm_state = decision.fsm_state;
+  }
+
   if (!shouldUseAcademicStateRestDirect()) {
     contactPayload.academic_state = sanitizeAcademicStateForDb(academicState);
   }
@@ -3122,7 +3150,7 @@ module.exports = async function handler(request) {
     if (normalizedPhone) {
       const { data: prevContact, error: prevContactError } = await client.database
         .from("wa_contacts_state")
-        .select("wa_stage, wa_last_intent, wa_needs_human, academic_state")
+        .select("wa_stage, wa_last_intent, wa_needs_human, academic_state, fsm_state")
         .eq("normalized_phone", normalizedPhone)
         .maybeSingle();
       throwIfError(prevContactError, "Lookup wa_contacts_state for context");
@@ -3131,6 +3159,7 @@ module.exports = async function handler(request) {
           wa_stage: prevContact.wa_stage,
           wa_last_intent: prevContact.wa_last_intent,
           wa_needs_human: prevContact.wa_needs_human,
+          fsm_state: prevContact.fsm_state || null,
         };
       }
       // ENG-0A-bis: RPC SDK evita schema cache del SDK y HTTP 508 loop en edge.
@@ -3142,7 +3171,39 @@ module.exports = async function handler(request) {
     }
 
     const catalogSot = await loadCatalogSotModule();
-    const decision = classifyIntent(parsed.message_text, config, contactContext, catalogSot);
+    let decision = null;
+    let ghlSuppressSideEffects = false;
+
+    if (config.ffNoContact !== false) {
+      const optOut = await loadOptOutHandlerModule();
+      const optTurn = optOut.resolveOptOutTurn({
+        rawText: parsed.message_text,
+        contactContext,
+        academicState,
+      });
+      academicState = optOut.mergeAcademicStatePatch(academicState, optTurn.academicStatePatch);
+
+      if (optTurn.action === "execute_opt_out") {
+        decision = enrichDecisionWithOperational(
+          optOut.buildOptOutDecision(parsed.message_text),
+        );
+      } else if (optTurn.action === "ask_confirmation") {
+        decision = enrichDecisionWithOperational(optTurn.decision);
+        ghlSuppressSideEffects = true;
+      } else if (optTurn.action === "re_opt_in") {
+        decision = enrichDecisionWithOperational(optTurn.decision);
+      } else if (optTurn.ghlSuppress === true) {
+        ghlSuppressSideEffects = true;
+      }
+    }
+
+    if (!decision) {
+      decision = classifyIntent(parsed.message_text, config, contactContext, catalogSot);
+    }
+
+    if (decision.ghlSuppress === true) {
+      ghlSuppressSideEffects = true;
+    }
     const enrichResult = await applyAcademicAndLlmEnrichment(
       decision,
       parsed.message_text,
@@ -3288,7 +3349,10 @@ module.exports = async function handler(request) {
     );
 
     let ghlSync = null;
-    if (config.ghlSyncMode === "dry_run" || config.ghlSyncMode === "live") {
+    if (
+      !ghlSuppressSideEffects &&
+      (config.ghlSyncMode === "dry_run" || config.ghlSyncMode === "live")
+    ) {
       try {
         const ghlAllowlist = resolveGhlLiveAllowlist(config, normalizedPhone || parsed.from || null);
         const ghlSyncAuth = await resolveGhlSyncAuthorizationForHandler(
@@ -3316,6 +3380,9 @@ module.exports = async function handler(request) {
           task_title: enrichedDecision.task_title,
           task_priority_label: enrichedDecision.task_priority_label,
           trafficSource: resolveInboundTrafficSource(parsed, contactContext),
+          ghl_tags: enrichedDecision.ghl_tags,
+          ghl_tags_to_remove: enrichedDecision.ghl_tags_to_remove,
+          ghl_note: enrichedDecision.ghl_note,
         };
 
         if (ghlSyncAuth.shouldSync) {

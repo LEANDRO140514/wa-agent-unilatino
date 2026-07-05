@@ -27,6 +27,9 @@ const BLOCKED_WA_INTENTS = new Set([
   "objecion_precio",
   "promociones_descuentos",
   "carrera_no_ofertada",
+  "opt_out",
+  "opt_out_confirmacion",
+  "re_opt_in",
 ]);
 
 /**

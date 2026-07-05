@@ -3,7 +3,7 @@
 **Fecha:** 2026-07-04  
 **Alcance:** Portar reglas de negocio del Prompt Maestro v2.1 al motor actual (`ycloud-wa-inbound.js` + `academic-engine`).  
 **Fuera de alcance Fase 1:** Fable 5, RAG, clasificador LLM (Paso 0 spec v4.1), motor de síntesis §5 spec.  
-**Estado:** APROBADO 2026-07-04 — implementación en curso (ítem 0 ✅).
+**Estado:** APROBADO 2026-07-04 — implementación en curso (ítems 0–2 ✅).
 
 ---
 
@@ -13,7 +13,7 @@
 |---|---|---|---|
 | 0 | Fix D4 catálogo SoT + matriz demanda §11 (5 fantasmas + Medicina) | — (always-on) | **✅ Done** — `tests/run-phase-fase1-item0-catalog-sot.mjs` 30/30 |
 | 1 | Verificar idempotencia ENG-0B (replay, cero side effects) | always-on | **✅ Done** — insert-first + `tests/run-phase-fase1-item1-idempotency.mjs` 23/23 |
-| 2 | OPT-OUT / NO_CONTACT (D22) | `FF_FSM`? → `FF_OPT_OUT` implícito en ítem 2 | Pendiente |
+| 2 | OPT-OUT / NO_CONTACT (D22) | `FF_NO_CONTACT` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item2-optout.mjs` 25/25 |
 | 3 | FSM lite (D1) | `FF_FSM` | Pendiente |
 | 4 | notOfferedResolver pipeline §11.1 completo | `FF_NOT_OFFERED` | Pendiente |
 | 5 | Fallbacks §12 + memoria (D23) | parte de FSM/fallbacks | Pendiente |
@@ -29,7 +29,7 @@
 |---|---|---|
 | 0. Catálogo §4.1 (D4) | **✅ Corregido** — `catalog-sot.js` | — |
 | 1. Idempotencia E1 | **✅ Verificado** — `claimInboundMessageForProcessing` insert-first | — |
-| 2. OPT-OUT / NO_CONTACT | **Ausente** | Matcher D22 + `no_contact` + tag `wa_no_contact` |
+| 2. OPT-OUT / NO_CONTACT | **✅ Implementado** — `opt-out-handler.js` + `fsm_state` | — |
 | 3. FSM LITE | **Ausente** | Columnas aditivas + `fsm_state`; `wa_stage` convive |
 | 4. Matriz §11 NO OFERTADAS | **Parcial** — demanda esperada en ítem 0; pipeline §11.1 ítem 4 | `FF_NOT_OFFERED` |
 | 5. Fallbacks §12 | **Parcial** | `fallback_count`, niveles 1–3, D23 |
@@ -137,8 +137,8 @@ Además FSM / fallbacks:
 |---|---|---|
 | `fallback_count` | §12, spec E2 | **Ausente** |
 | `closed_by_agent` | Spec E2 | **Ausente** |
-| FSM `current_state` | §10 + spec: SALUDO_INICIAL \| CONSULTA \| HUMANO \| NO_CONTACT | **Ausente** — se usa `wa_stage` libre (ej. `carrera_interes`, `orientacion`) |
-| `no_contact` flag | §10, D22 | **Ausente** |
+| FSM `current_state` | §10 + spec: SALUDO_INICIAL \| CONSULTA \| HUMANO \| NO_CONTACT | **Parcial** — columna `fsm_state` (ítem 2 escribe `NO_CONTACT`; backfill ítem 3) |
+| `no_contact` flag | §10, D22 | **✅ Ítem 2** — `fsm_state='NO_CONTACT'` (sin booleano paralelo) |
 | Lead states (`career_interest`, `price_interest`, …) | §10 | **No modelados** — inferibles desde `wa_stage` parcialmente |
 
 ### Propuesta de persistencia Fase 1 (sin nueva dependencia)
@@ -188,7 +188,7 @@ flowchart TD
 ### Side effects Maestro §14 **ausentes**
 
 - `wa_market_signal_career_demand` + note con `requestedCareerRaw` (§11)
-- `wa_no_contact` (D22)
+- `wa_no_contact` (D22) — **ítem 2** vía `opt_out` intent + tag en sync
 - `wa_low_confidence` (fallback nivel 3)
 - Dedupe task por día
 - Dedupe note textual mismo día
@@ -270,17 +270,30 @@ flowchart TD
 
 ---
 
-### 2. OPT-OUT / NO_CONTACT (D22, T14)
+### 2. OPT-OUT / NO_CONTACT (D22, T14) ✅ IMPLEMENTADO (ítem 2)
 
-**Hoy:** sin matcher. `policy_no_contact` en GHL es **política de sync**, no opt-out del lead.
+**Módulo:** `insforge/functions/lib/opt-out-handler.js`  
+**Flag:** `FF_NO_CONTACT` — default **true** (`!== "false"`); `false` restaura comportamiento pre-ítem-2.  
+**Migración:** `insforge/sql/wa_contacts_state_fsm_state.sql` — columna `fsm_state VARCHAR(30) NULL` (adelanto ítem 3; **sin** flag booleano `no_contact` paralelo).
 
-**Requerido:**
-- Frases: "ya no me escriban", "baja", "no contactar", etc. (D22)
-- Estado persistente `no_contact` + tag `wa_no_contact`
-- Bloquear mensajes **proactivos** (outbound iniciado por sistema — hoy no hay cron proactivo en handler; preparar flag + gate)
-- Side effect permitido: solo registro opt-out (D22 columna "Bloquear SE")
+#### Decisiones O1–O6 (implementadas)
 
----
+| ID | Decisión | Implementación |
+|---|---|---|
+| O1 | Una sola fuente de estado | `wa_contacts_state.fsm_state='NO_CONTACT'` en baja; resto NULL hasta backfill ítem 3 |
+| O2 | Matcher estricto | Frases explícitas (D22) + confirmación única para ambigüedad ("ya no quiero"); **prohibido** opt-out con "no", "no gracias", "ya no" sueltos |
+| O3 | Side effects baja | Respuesta fija sin retención + `fsm_state` + tag `wa_no_contact` + note GHL vía sync existente |
+| O4 | Semántica NO_CONTACT | Bloquea side effects GHL en turnos reactivos (`ghlSuppressSideEffects`); Eva responde preguntas sustantivas; re-opt-in explícito → `fsm_state=NULL` + remove tag |
+| O5 | Alcance bloqueo | Handler solo suprime **su** outbound/GHL en turno; campañas GHL → **TAREA OPS pendiente** (ver abajo) |
+| O6 | Feature flag | `FF_NO_CONTACT` default true tras suite verde |
+
+#### TAREA DE OPERACIÓN (O5) — pendiente en GHL
+
+Configurar en GoHighLevel la **exclusión por tag `wa_no_contact`** en workflows, campañas y secuencias proactivas WhatsApp. El código **no puede** forzar esa exclusión desde el handler inbound; el tag es la señal de CRM.
+
+#### Tests
+
+`tests/run-phase-fase1-item2-optout.mjs` — **25/25 PASS** (7 escenarios: explícita, negativos, ambigua+sí/no, reactivo NO_CONTACT, re-opt-in, replay idempotente, flag off).
 
 ### 3. FSM LITE (spec E2)
 
@@ -370,7 +383,7 @@ flowchart TD
 | T11 | Humano | Parcial (task) | Alta |
 | T12 | Inscripción urgente | Parcial | Alta |
 | T13 | No llamadas | **Ausente** | Media |
-| T14 | Opt-out | **Ausente** | **Crítica** |
+| T14 | Opt-out | **✅ Ítem 2** — matcher estricto + NO_CONTACT | — |
 | T15 | Replay idempotente | ENG-0B | **Crítica** |
 | T16 | Fuera dominio | Parcial | Media |
 | T17 | Hostilidad x3 | **Ausente** | Baja Fase 1 |
@@ -455,6 +468,12 @@ Equivalente semántico a `INSERT … ON CONFLICT DO NOTHING` + abort si no se re
 
 **Conclusión V2:** Pipeline de negocio cumple insert-first; side effects estrictamente post-claim.
 
+### Limitación conocida — mensajes sin `ycloud_message_id`
+
+El índice único parcial sobre `ycloud_message_id` **no colisiona entre NULLs** (comportamiento estándar SQL: cada NULL es distinto). Mensajes inbound **sin** `ycloud_message_id` **no participan** del claim de idempotencia insert-first: cada replay genera un nuevo INSERT y puede duplicar side effects.
+
+**Mitigación operativa:** YCloud debe enviar siempre `message_id`; el handler loguea warning `missing_ycloud_message_id` post-claim. **Fix estructural** (hash de payload, índice funcional, rechazo duro) queda fuera de alcance ítem 1 — backlog ops/ENG.
+
 ---
 
 ### D3 — Tags legacy + maestro §14 ✅ RESUELTO
@@ -533,15 +552,17 @@ Aditivo: flujos nuevos usan tags maestro; legacy se mantiene en sync existente h
 
 - [x] Ítem 0: catálogo §4.1 + 5 fantasmas en matriz demanda — suite 30/30
 - [x] Ítem 1: idempotencia insert-first + replay sin side effects — suite 23/23; ENG-0B 4/4; ENG-0C 17/17
+- [x] Ítem 2: OPT-OUT / NO_CONTACT (D22) — `FF_NO_CONTACT` + `fsm_state` + tag `wa_no_contact` — suite 25/25
 - [ ] Suite T01–T08, T11–T17, T20–T24, T27 + replay duplicado **en verde**
 - [ ] Replay webhook: cero outbound, cero GHL, cero upsert contact en 2ª invocación
-- [ ] Opt-out T14: `no_contact` persistente + bloqueo proactivos
+- [x] Opt-out T14: `NO_CONTACT` persistente + bloqueo side effects reactivos + tag CRM
+- [ ] **OPS:** Exclusión GHL por tag `wa_no_contact` en campañas/workflows (O5)
 - [ ] "Quiero medicina" T06: tags/note demanda (side effects ítem 4)
-- [ ] Feature flags ítems 2–6: `FF_FSM`, `FF_NOT_OFFERED`, `FF_ESCALATION_V2` (default off)
+- [ ] Feature flags ítems 3–6: `FF_FSM`, `FF_NOT_OFFERED`, `FF_ESCALATION_V2` (default off); `FF_NO_CONTACT` default **on**
 - [ ] Comportamiento legacy intacto con flags OFF
 
 ---
 
 ## Próximo paso
 
-**Ítem 2:** OPT-OUT / NO_CONTACT (D22) — `FF_FSM` o flag dedicado; estado `no_contact` + tag `wa_no_contact`.
+**Ítem 3:** FSM lite — backfill `wa_stage` → `fsm_state` (`FF_FSM`); columnas adicionales `closed_by_agent`, `fallback_count` en JSON/academic_state según D1.
