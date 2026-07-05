@@ -3,7 +3,7 @@
 **Fecha:** 2026-07-05  
 **Location:** UNIVERSIDAD LATINO (`uPgYlVj3v4nLWNRc5SQq`)  
 **MCP:** `user-jewel-ghl-readonly` — **sin escrituras**  
-**Estado:** ⏸ **DETENIDO** — esperando tu aprobación antes de Parte C/D.
+**Estado:** ✅ **B4 APROBADA** (2026-07-05) — Partes C–E documentadas en [`ghl_no_contact_setup.md`](ghl_no_contact_setup.md) y [`ghl_fase1_ops.md`](ghl_fase1_ops.md).
 
 ---
 
@@ -102,7 +102,7 @@ Tags extraídos del código Fase 1 (`sync-ghl-contact.js`, `escalation-payload.j
 
 **Limitación API:** `ghl_list_workflows_full` (detalle de nodos/triggers) no pudo ejecutarse por credenciales internas ausentes en el servidor MCP. Si existen workflows creados manualmente en UI que el API no lista, requiere verificación visual en GHL → Automation → Workflows.
 
-**Interpretación:** En el estado actual detectable por API, **no hay workflows/campañas outbound descubiertos** que requieran parche C3. La capa primaria de no-contact (C2: DND nativo vía workflow) sigue siendo **necesaria** antes de activar cualquier automatización futura.
+**Interpretación:** API pública: 0 workflows/campañas. **C3 = NO VERIFICADO** — la UI puede tener automatizaciones no listadas por API. Checklist manual en [`ghl_no_contact_setup.md`](ghl_no_contact_setup.md) §4. La capa primaria de no-contact (C2: DND nativo vía workflow) es **necesaria** independientemente de C3.
 
 ---
 
@@ -121,61 +121,96 @@ Tags que el handler **lee** del CRM (sin prefijo `wa_`) según spec v4.1 y maest
 
 ---
 
-## Cambios propuestos (Parte C — pendiente tu OK)
+## C1 — Tags a pre-crear (APROBADO — 3 grupos)
 
-### C1 — Pre-crear tags FALTANTES
+MCP readonly → listas copy-paste en [`ghl_no_contact_setup.md`](ghl_no_contact_setup.md) §1. **Estado: PENDIENTE MANUAL.**
 
-Crear en GHL → Settings → Tags, con **nombre exacto** (case-sensitive):
+### (a) EMITIDOS POR CÓDIGO F1
 
-```
-wa_no_contact
-wa_no_call
-wa_needs_human
-wa_low_confidence
-wa_ready_to_enroll
-wa_career_not_offered
-wa_market_signal_career_demand
-wa_requested_unknown_career
-wa_requested_invalid_modality
-wa_needs_human_career_not_offered
-wa_document_received
-wa_post_test
-wa_duda_test
-wa_interes_promocion
-wa_revalidacion
-wa_nivel_no_principal
-wa_ubicacion
-wa_rvoe
-wa_objecion_precio
-wa_carrera_no_ofertada
-wa_salud
-wa_preparatoria
-wa_posgrado
-wa_revalidation
-wa_scholarship_special
-wa_requested_invalid_level
-interes_beca
-interes_info
-interes_visita
-post_test
-```
+Eva **escribe** estos tags al sincronizar. **8 ya EXISTEN:** `eva-wa`, `wa_interes_info`, `wa_interes_beca`, `wa_interes_carrera`, `wa_interes_carreras`, `wa_interes_test`, `wa_requiere_asesor`, `wa_sin_texto`.
 
-Tags F2 (opcional pre-crear ahora o en F2): `wa_payment_intent`, `wa_urgent`, `wa_docs_incomplete`, `wa_rvoe_escalation`, `wa_complaint`, `wa_minor`, `wa_parent`, `wa_price_negotiation`, `wa_appointment`.
+| Tag | Módulo | Estado GHL |
+|---|---|---|
+| `wa_no_contact` | `opt-out-handler` | FALTA |
+| `wa_needs_human` | `escalation-payload` | FALTA |
+| `wa_low_confidence` | `escalation-payload`, `fallbacks-lite` | FALTA |
+| `wa_ready_to_enroll` | `escalation-payload` | FALTA |
+| `wa_career_not_offered` | `notOfferedResolver` | FALTA |
+| `wa_market_signal_career_demand` | `notOfferedResolver` | FALTA |
+| `wa_requested_unknown_career` | `notOfferedResolver` | FALTA |
+| `wa_requested_invalid_modality` | `notOfferedResolver` | FALTA |
+| `wa_needs_human_career_not_offered` | `notOfferedResolver` | FALTA |
+| `wa_requested_invalid_level` | `notOfferedResolver` | FALTA |
+| `wa_revalidation` | `escalation-payload` | FALTA |
+| `wa_scholarship_special` | `escalation-payload` | FALTA |
+| `wa_post_test` | `ycloud-wa-inbound` | FALTA |
+| `wa_duda_test` | `ycloud-wa-inbound` | FALTA |
+| `wa_interes_promocion` | `ycloud-wa-inbound` | FALTA |
+| `wa_revalidacion` | `ycloud-wa-inbound` | FALTA |
+| `wa_nivel_no_principal` | `ycloud-wa-inbound` | FALTA |
+| `wa_ubicacion` | `ycloud-wa-inbound` | FALTA |
+| `wa_rvoe` | `ycloud-wa-inbound` | FALTA |
+| `wa_objecion_precio` | `ycloud-wa-inbound` | FALTA |
+| `wa_carrera_no_ofertada` | `ycloud-wa-inbound` | FALTA |
+| `wa_salud` | `ycloud-wa-inbound` (extra carrera salud) | FALTA |
+| `wa_preparatoria` | `ycloud-wa-inbound` | FALTA |
+| `wa_posgrado` | `ycloud-wa-inbound` | FALTA |
 
-### C2 — Workflows DND (mecanismo preferido)
+### (b) LEÍDOS POR CÓDIGO (no emitidos por Eva)
+
+| Tag | Lector | Aplicador esperado | Estado GHL |
+|---|---|---|---|
+| `wa_no_call` | `escalation-payload` P6 (título task) | Asesor manual | FALTA |
+| `interes_beca` | E8 / SALUDO_INICIAL | Marketing/captación | FALTA |
+| `interes_info` | E8 | Marketing/captación | FALTA |
+| `interes_visita` | E8 | Marketing/captación | FALTA |
+| `post_test` | E8 (suprime TEST_INTEREST) | Test vocacional / workflow | FALTA |
+
+Ver dependencia C5 en [`ghl_fase1_ops.md`](ghl_fase1_ops.md).
+
+### (c) FASE 2 (spec / `wired: false`)
+
+| Tag | Fuente | Estado GHL |
+|---|---|---|
+| `wa_document_received` | Spec v4.1 / maestro (media F2) | FALTA |
+| `wa_payment_intent` | `escalation-payload` wired:false | FALTA |
+| `wa_urgent` | `escalation-payload` wired:false | FALTA |
+| `wa_docs_incomplete` | `escalation-payload` wired:false | FALTA |
+| `wa_rvoe_escalation` | `escalation-payload` wired:false | FALTA |
+| `wa_complaint` | `escalation-payload` wired:false | FALTA |
+| `wa_minor` | `escalation-payload` wired:false | FALTA |
+| `wa_parent` | `escalation-payload` wired:false | FALTA |
+| `wa_price_negotiation` | `escalation-payload` wired:false | FALTA |
+| `wa_appointment` | `escalation-payload` wired:false | FALTA |
+
+---
+
+## C2 — Workflows DND (APROBADO — PENDIENTE MANUAL)
 
 | Workflow | Trigger | Acciones |
 |---|---|---|
-| **WA Opt-Out → DND** | Tag added = `wa_no_contact` | Activar DND (WhatsApp + SMS; total si la location lo permite) + remover de workflows activos |
+| **WA Opt-Out → DND** | Tag added = `wa_no_contact` | DND WhatsApp/SMS (+ total si aplica) + remover de workflows activos |
 | **WA Re-Opt-In** | Tag removed = `wa_no_contact` | Desactivar DND |
 
-### C3 — Exclusión en campañas/workflows existentes
+Guía UI: [`ghl_no_contact_setup.md`](ghl_no_contact_setup.md) §2–3.
 
-**N/A por ahora** — 0 workflows/campañas WA/SMS detectados vía API. Cuando se creen automatizaciones outbound, agregar condición: *contact does not have tag `wa_no_contact`* como segunda capa tras DND nativo.
+---
 
-### C4 — Limitación MCP escritura
+## C3 — Exclusión outbound — NO VERIFICADO
 
-El MCP configurado es **readonly**. Creación/edición de workflows **no es ejecutable por agente** → generar `docs/ops/ghl_no_contact_setup.md` con guía manual paso a paso (marcado PENDIENTE MANUAL) en Parte C.
+| Fuente | Resultado | Cobertura |
+|---|---|---|
+| API pública | 0 workflows, 0 campañas | — |
+| API interna | No disponible | — |
+| UI GHL | No auditada por agente | **NO VERIFICADO** |
+
+Checklist y parche manual: [`ghl_no_contact_setup.md`](ghl_no_contact_setup.md) §4. Condición: *contact does not have tag `wa_no_contact`* como segunda capa tras DND nativo.
+
+---
+
+## C4 — MCP readonly
+
+Sin escritura en GHL. Toda implementación C1–D vía guía manual.
 
 ---
 
@@ -189,15 +224,14 @@ El MCP configurado es **readonly**. Creación/edición de workflows **no es ejec
 
 ---
 
-## Siguiente paso
+## Entregables C–E
 
-**Confirma o ajusta la lista de cambios C1–C3.** Tras tu OK:
+| Documento | Contenido |
+|---|---|
+| [`ghl_no_contact_setup.md`](ghl_no_contact_setup.md) | C1 copy-paste, C2 workflows, C3 checklist UI, D smoke test |
+| [`ghl_fase1_ops.md`](ghl_fase1_ops.md) | Cierre, C5 productores origen, pendientes manuales |
 
-1. Parte C (tags + guía manual workflows si MCP no escribe)
-2. Parte D (smoke test con contacto `TEST EVA — NO LEAD` — necesitaré tu número de pruebas si no está en env)
-3. Parte E (`ghl_fase1_ops.md`, commit `ops(ghl): no_contact DND + tag taxonomy (Fase 1.5)`)
-
-### Recordatorio — pasos que no automatizo
+### Recordatorio — pasos que ejecuta Leandro
 
 1. Correr las **3 migraciones SQL** en InsForge **antes** del deploy del handler  
 2. Deploy del handler con flags en **default ON**  
