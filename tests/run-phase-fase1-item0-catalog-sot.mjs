@@ -37,6 +37,7 @@ for (const [key, value] of Object.entries({
   GHL_SYNC_MODE: "dry_run",
   ACADEMIC_ENGINE_ENABLED: "false",
   EVA_LLM_ENABLED: "false",
+  FF_NOT_OFFERED: "false",
   INSFORGE_BASE_URL: "http://mock-insforge.local",
   ANON_KEY: "mock-anon-key",
 })) {

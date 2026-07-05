@@ -3,7 +3,7 @@
 **Fecha:** 2026-07-04  
 **Alcance:** Portar reglas de negocio del Prompt Maestro v2.1 al motor actual (`ycloud-wa-inbound.js` + `academic-engine`).  
 **Fuera de alcance Fase 1:** Fable 5, RAG, clasificador LLM (Paso 0 spec v4.1), motor de síntesis §5 spec.  
-**Estado:** APROBADO 2026-07-04 — implementación en curso (ítems 0–3 ✅).
+**Estado:** APROBADO 2026-07-04 — implementación en curso (ítems 0–4 ✅).
 
 ---
 
@@ -15,7 +15,7 @@
 | 1 | Verificar idempotencia ENG-0B (replay, cero side effects) | always-on | **✅ Done** — insert-first + `tests/run-phase-fase1-item1-idempotency.mjs` 23/23 |
 | 2 | OPT-OUT / NO_CONTACT (D22) | `FF_NO_CONTACT` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item2-optout.mjs` 25/25 |
 | 3 | FSM lite (D1) | `FF_FSM` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item3-fsm.mjs` 39/39 |
-| 4 | notOfferedResolver pipeline §11.1 completo | `FF_NOT_OFFERED` | Pendiente |
+| 4 | notOfferedResolver pipeline §11.1 completo | `FF_NOT_OFFERED` (default **true**) | **✅ Done** — `tests/run-phase-fase1-item4-notoffered.mjs` 44/44 |
 | 5 | Fallbacks §12 + memoria (D23) | parte de FSM/fallbacks | Pendiente |
 | 6 | EscalationPayload §13 + dedupe task | `FF_ESCALATION_V2` | Pendiente |
 
@@ -31,7 +31,7 @@
 | 1. Idempotencia E1 | **✅ Verificado** — `claimInboundMessageForProcessing` insert-first | — |
 | 2. OPT-OUT / NO_CONTACT | **✅ Implementado** — `opt-out-handler.js` + `fsm_state` | — |
 | 3. FSM LITE | **✅ Implementado** — `fsm-lite.js` + `closed_by_agent` + lazy reset TTL | — |
-| 4. Matriz §11 NO OFERTADAS | **Parcial** — demanda esperada en ítem 0; pipeline §11.1 ítem 4 | `FF_NOT_OFFERED` |
+| 4. Matriz §11 NO OFERTADAS | **✅ Implementado** — `notOfferedResolver.js` + matriz N1 + plantilla 8 pasos | — |
 | 5. Fallbacks §12 | **Parcial** | `fallback_count`, niveles 1–3, D23 |
 | 6. Escalación §13 v2 | **Parcial** | `EscalationPayload` + dedupe task/día |
 
@@ -53,9 +53,9 @@ El maestro usa **camelCase inglés** en §5.1 (admisiones) + §5.2 (comerciales)
 | `duda_test` | `vocational_test` (soporte) + desvío test.trabado | `test_needed` / escalación | Task genérica; maestro pide tag `wa_test_issue` |
 | `post_test` | `vocational_test` (post) | `test_needed` | Maestro: **prohibido** reofrecer test (T28) — parcialmente cubierto en academic-engine |
 | `humano` | `human_advisor` | `human_requested` | Escalación sin `EscalationPayload.reason=human_requested` |
-| `carrera_no_ofertada` | `career_specific` → pipeline §11 | `career_not_offered` | **Solo Medicina** (`matchesCarreraNoOfertadaMedicina`); no pipeline completo |
+| `carrera_no_ofertada` | `career_specific` → pipeline §11 | `career_not_offered` | **✅ Ítem 4** — pipeline §11.1 (`notOfferedResolver.js`, `FF_NOT_OFFERED`) |
 | `revalidacion_estudios` | `revalidation` / `equivalence` | `escalated_to_human` | Task existe; reason enum `revalidation_case` ausente |
-| `niveles_no_principales` | *(no ofertada §11.1 posgrados/prepa)* | `career_not_offered` | Respuesta genérica; no matriz §11 |
+| `niveles_no_principales` | *(no ofertada §11.1 posgrados/prepa)* | `career_not_offered` | **✅ Ítem 4** — `buildInvalidLevelResponse` + tag `wa_requested_invalid_level` |
 | `ubicacion_campus` | `campus_info` | `general_interest` | OK aproximado |
 | `rvoe_reconocimiento` | `rvoe` | `career_interest` | Sin escalación `rvoe_sensitive` cuando falta dato (T19) |
 | `objecion_precio` | `lead_objects_price` / objeción §7 | `objection_price` | Matriz objeciones §7 no portada en Fase 1 |
@@ -322,9 +322,33 @@ Configurar en GoHighLevel la **exclusión por tag `wa_no_contact`** en workflows
 
 ---
 
-### 4. Matriz §11 NO OFERTADAS (T06, T07, T08)
+### 4. Matriz §11 NO OFERTADAS (T06, T07, T08) ✅
 
-**Hoy:**
+**Implementado (2026-07-05):**
+
+| Decisión | Detalle |
+|---|---|
+| N1 | Matriz completa en `catalog-sot.js` (Salud, Tecnología, Creativas, Internacionales, Jurídicas, Negocios, Educación) |
+| N2 | Typo → confirmación sí/no → `carrera_interes` o flujo unknown |
+| N3 | Administración ambigua → pregunta modalidad antes de `carrera_interes` |
+| N4 | Alias (ej. Leyes → Derecho) + pregunta modalidad |
+| N5 | Modalidad inválida → intent `modalidad_invalida` (§11.2), sin promesa futura |
+| N6 | Nivel no principal (maestría/prepa/etc.) → `niveles_no_principales` |
+| N7 | Insistencia ≥2 → `humano` + tag `wa_not_offered_insistence` |
+
+**Pipeline (`notOfferedResolver.js`, post opt-out, pre `classifyIntent`):**
+
+1. Pending confirm (typo/admin) → 2. Admin ambiguous → 3. Exact offered + modalidad → 4. Alias → 5. Typo → 6. Invalid modality → 7. Invalid level → 8. Matriz demanda → 9. Unknown career
+
+**Side effects GHL:** tags `wa_career_not_offered` + `wa_market_signal_career_demand`; note literal `requestedCareerRaw`; dedupe note mismo día (`shouldSkipDemandNote` + `wa_ghl_sync_log`).
+
+**Plantilla §11.2:** 8 pasos vía `buildEightStepNotOfferedResponse` (solo con `FF_NOT_OFFERED=true`).
+
+**Legacy (`FF_NOT_OFFERED=false`):** `classifyIntent` + `buildNotOfferedDemandResponse` (plantilla simple ítem 0).
+
+**Tests:** `tests/run-phase-fase1-item4-notoffered.mjs` — **44/44 PASS**; regresión ítems 0–3 + ENG-0B/0C en verde.
+
+**Hoy (referencia histórica):**
 - `matchesCarreraNoOfertadaMedicina` — keywords medicina/médico/doctor
 - Respuesta fija `EVA_MEDICINA_NO_OFERTADA_RESPONSE` — **2 alternativas implícitas**, no plantilla 8 pasos
 - Tag `wa_carrera_no_ofertada` + extra `wa_salud` — **falta** `wa_market_signal_career_demand`, note `requestedCareerRaw`
@@ -567,13 +591,13 @@ Aditivo: flujos nuevos usan tags maestro; legacy se mantiene en sync existente h
 - [ ] Replay webhook: cero outbound, cero GHL, cero upsert contact en 2ª invocación
 - [x] Opt-out T14: `NO_CONTACT` persistente + bloqueo side effects reactivos + tag CRM
 - [ ] **OPS:** Exclusión GHL por tag `wa_no_contact` en campañas/workflows (O5)
-- [ ] "Quiero medicina" T06: tags/note demanda (side effects ítem 4)
+- [x] Ítem 4: notOfferedResolver §11.1 — `FF_NOT_OFFERED` default **on** — suite 44/44; T06 medicina 8 pasos + tags/note
 - [x] Ítem 3: FSM lite — `FF_FSM` + lazy reset TTL + precedencia NO_CONTACT — suite 39/39
-- [ ] Feature flags ítems 4–6: `FF_NOT_OFFERED`, `FF_ESCALATION_V2` (default off); `FF_NO_CONTACT` / `FF_FSM` default **on**
-- [ ] Comportamiento legacy intacto con flags OFF
+- [ ] Feature flags ítems 5–6: `FF_ESCALATION_V2` (default off); `FF_NO_CONTACT` / `FF_FSM` / `FF_NOT_OFFERED` default **on**
+- [x] Comportamiento legacy ítem 0 con `FF_NOT_OFFERED=false` (N11 + C08–C13)
 
 ---
 
 ## Próximo paso
 
-**Ítem 4:** `notOfferedResolver.js` — pipeline §11.1 completo (`FF_NOT_OFFERED`).
+**Ítem 5:** Fallbacks §12 + `fallback_count` (parte FSM/fallbacks, D23).

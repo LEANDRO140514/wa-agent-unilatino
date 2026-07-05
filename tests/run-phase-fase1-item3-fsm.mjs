@@ -24,6 +24,7 @@ const BASE_ENV = {
   ANON_KEY: "mock-anon-key",
   FF_NO_CONTACT: "true",
   FF_FSM: "true",
+  FF_NOT_OFFERED: "false",
 };
 
 for (const [key, value] of Object.entries(BASE_ENV)) {

@@ -178,6 +178,7 @@ function getConfig() {
     metaAdsRequireQualification: Deno.env.get("META_ADS_REQUIRE_QUALIFICATION") !== "false",
     ffNoContact: Deno.env.get("FF_NO_CONTACT") !== "false",
     ffFsm: Deno.env.get("FF_FSM") !== "false",
+    ffNotOffered: Deno.env.get("FF_NOT_OFFERED") !== "false",
   };
 }
 
@@ -1115,7 +1116,8 @@ function buildGHLDryRunPayload(context, existingGhlContactId, customFieldsState)
   const wouldUpdateContact = governed
     ? context.ghlWouldCreateContact === true && Boolean(existingGhlContactId)
     : Boolean(existingGhlContactId);
-  const includeNote = governed ? context.ghlWouldCreateNote === true : true;
+  const includeNote =
+    (governed ? context.ghlWouldCreateNote === true : true) && context.ghl_skip_note !== true;
   const note = includeNote
     ? context.ghl_note ||
       buildGHLNoteBody(context, `[Eva WA dry-run] ${context.timestamp}`)
@@ -2316,8 +2318,9 @@ function returnIntent(intent, config, menuMeta = null, contactContext = {}, cata
   return merged;
 }
 
-function classifyIntent(rawText, config, contactContext = {}, catalogSot = null) {
+function classifyIntent(rawText, config, contactContext = {}, catalogSot = null, options = {}) {
   const careerKeywords = catalogSot?.getOfficialCareerKeywords?.() || [];
+  const skipNotOfferedPipeline = options.skipNotOfferedPipeline === true;
 
   if (!rawText || !String(rawText).trim()) {
     return returnIntent("sin_texto", config, null, contactContext, catalogSot);
@@ -2339,20 +2342,25 @@ function classifyIntent(rawText, config, contactContext = {}, catalogSot = null)
     return returnIntent("humano", config, null, contactContext, catalogSot);
   }
 
-  const notOffered = catalogSot?.detectExpectedNotOfferedDemand?.(rawText);
-  if (notOffered) {
-    return returnIntent("carrera_no_ofertada", config, null, contactContext, catalogSot, {
-      responseText: notOffered.responseText,
-      not_offered_id: notOffered.id,
-      requested_career_raw: notOffered.label,
-    });
+  if (!skipNotOfferedPipeline) {
+    const notOffered = catalogSot?.detectExpectedNotOfferedDemand?.(rawText);
+    if (notOffered) {
+      return returnIntent("carrera_no_ofertada", config, null, contactContext, catalogSot, {
+        responseText: catalogSot.buildNotOfferedDemandResponse(
+          notOffered.requestedCareerRaw || notOffered.label,
+          notOffered.alternatives,
+        ),
+        not_offered_id: notOffered.id,
+        requested_career_raw: notOffered.requestedCareerRaw || notOffered.label,
+      });
+    }
   }
 
   if (matchesRevalidacionEstudios(text, hasAny)) {
     return returnIntent("revalidacion_estudios", config, null, contactContext, catalogSot);
   }
 
-  if (matchesNivelesNoPrincipales(text, hasAny)) {
+  if (!skipNotOfferedPipeline && matchesNivelesNoPrincipales(text, hasAny)) {
     return returnIntent("niveles_no_principales", config, null, contactContext, catalogSot);
   }
 
@@ -2418,6 +2426,7 @@ let _ghlRelevanceGateModule = null;
 let _catalogSotModule = null;
 let _optOutHandlerModule = null;
 let _fsmLiteModule = null;
+let _notOfferedResolverModule = null;
 
 async function loadCatalogSotModule() {
   if (!_catalogSotModule) {
@@ -2438,6 +2447,13 @@ async function loadFsmLiteModule() {
     _fsmLiteModule = await import("./lib/fsm-lite.js");
   }
   return _fsmLiteModule;
+}
+
+async function loadNotOfferedResolverModule() {
+  if (!_notOfferedResolverModule) {
+    _notOfferedResolverModule = await import("./lib/academic-engine/notOfferedResolver.js");
+  }
+  return _notOfferedResolverModule;
 }
 
 function shouldPersistFsmState(decision, config) {
@@ -2828,6 +2844,9 @@ const ACADEMIC_STATE_KEYS = [
   "last_career",
   "last_question",
   "pending_opt_out_confirmation",
+  "pending_career_confirmation",
+  "not_offered_request_counts",
+  "not_offered_career_requested",
 ];
 
 /**
@@ -3249,8 +3268,30 @@ module.exports = async function handler(request) {
       }
     }
 
+    if (!decision && config.ffNotOffered !== false) {
+      const notOffered = await loadNotOfferedResolverModule();
+      const notOfferedTurn = notOffered.resolveNotOfferedTurn({
+        rawText: parsed.message_text,
+        academicState,
+        config,
+      });
+      academicState = notOffered.mergeAcademicStatePatch(
+        academicState,
+        notOfferedTurn.academicStatePatch,
+      );
+
+      if (notOfferedTurn.action === "decision" && notOfferedTurn.decision) {
+        decision = enrichDecisionWithOperational(notOfferedTurn.decision);
+      }
+      if (notOfferedTurn.ghlSuppress === true) {
+        ghlSuppressSideEffects = true;
+      }
+    }
+
     if (!decision) {
-      decision = classifyIntent(parsed.message_text, config, contactContext, catalogSot);
+      decision = classifyIntent(parsed.message_text, config, contactContext, catalogSot, {
+        skipNotOfferedPipeline: config.ffNotOffered !== false,
+      });
     }
 
     if (decision.ghlSuppress === true) {
@@ -3275,6 +3316,32 @@ module.exports = async function handler(request) {
         config,
       });
       enrichedDecision = fsm.mergeFsmPatchIntoDecision(enrichedDecision, fsmPatch);
+    }
+
+    if (
+      !ghlSuppressSideEffects &&
+      config.ffNotOffered !== false &&
+      enrichedDecision.ghl_note &&
+      enrichedDecision.demand_note_key &&
+      normalizedPhone
+    ) {
+      const notOfferedDedupe = await loadNotOfferedResolverModule();
+      const { data: priorGhlLogs, error: priorGhlLogsError } = await client.database
+        .from("wa_ghl_sync_log")
+        .select("payload, created_at, normalized_phone, would_add_note")
+        .eq("normalized_phone", normalizedPhone);
+      if (!priorGhlLogsError && notOfferedDedupe.shouldSkipDemandNote(
+        priorGhlLogs || [],
+        normalizedPhone,
+        enrichedDecision.demand_note_key,
+        nowIso,
+      )) {
+        enrichedDecision = {
+          ...enrichedDecision,
+          ghl_skip_note: true,
+          ghl_note: null,
+        };
+      }
     }
 
     try {
@@ -3449,6 +3516,7 @@ module.exports = async function handler(request) {
           ghl_tags: enrichedDecision.ghl_tags,
           ghl_tags_to_remove: enrichedDecision.ghl_tags_to_remove,
           ghl_note: enrichedDecision.ghl_note,
+          ghl_skip_note: enrichedDecision.ghl_skip_note === true,
         };
 
         if (ghlSyncAuth.shouldSync) {
