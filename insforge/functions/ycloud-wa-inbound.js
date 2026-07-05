@@ -44,27 +44,8 @@ const EVA_OBJECION_PRECIO_RESPONSE =
 const EVA_PROMOCIONES_RESPONSE =
   "Puedo orientarte con las becas y descuentos oficiales disponibles. Para promociones vigentes específicas, un asesor puede confirmarte las condiciones actuales. ¿Te gustaría que te contacte?";
 
-const EVA_MEDICINA_NO_OFERTADA_RESPONSE =
-  "Por ahora no tengo Medicina dentro de la oferta oficial disponible. En el área de Salud sí aparecen Psicología, Enfermería y Nutrición. ¿Te gustaría información de alguna de esas carreras?";
-
 const EVA_CARRERAS_ONLINE_PLACEHOLDER =
   "Déjame revisar las carreras en modalidad En línea disponibles en la información oficial.";
-
-const EVA_CAREER_NAMES = [
-  "derecho",
-  "psicologia",
-  "administracion",
-  "contaduria",
-  "mercadotecnia",
-  "educacion",
-  "enfermeria",
-  "arquitectura",
-  "ingenieria",
-  "sistemas",
-  "criminologia",
-  "nutricion",
-  "diseno",
-];
 
 const EVA_TASK_INTENTS = new Set([
   "beca",
@@ -1752,9 +1733,15 @@ async function syncGHLContact(client, config, context) {
   return syncGHLContactDryRun(client, config, context);
 }
 
-function buildIntentDecision(intent, config, contactContext = {}) {
+function buildIntentDecision(intent, config, contactContext = {}, catalogSot = null) {
   const testUrl = config.evaTestUrl;
   const preserveHuman = shouldPreserveHumanContext(contactContext);
+  const carrerasDisponiblesText =
+    catalogSot?.buildCarrerasDisponiblesResponseText?.() ||
+    "En Universidad Latino contamos con licenciaturas oficiales. ¿Te gustaría conocer el listado por área?";
+  const notOfferedFallbackText =
+    catalogSot?.buildNotOfferedDemandResponse?.("esa carrera", []) ||
+    "Por el momento esa carrera no está en nuestra oferta académica. ¿Te gustaría que un asesor te oriente?";
 
   if (intent === "agradecimiento") {
     return enrichDecisionWithOperational({
@@ -1824,8 +1811,7 @@ function buildIntentDecision(intent, config, contactContext = {}) {
       createTask: false,
     },
     carreras_disponibles: {
-      responseText:
-        "En Universidad Latino contamos con diversas opciones de licenciatura 😊\n\nAlgunas áreas que puedes explorar son:\n- Derecho\n- Psicología\n- Administración\n- Contaduría\n- Mercadotecnia\n- Educación\n- Enfermería\n- Arquitectura\n- Sistemas\n- Criminología\n- Nutrición\n- Diseño\n\n¿Ya tienes alguna carrera en mente o prefieres hacer el test vocacional para descubrir cuál va mejor contigo?",
+      responseText: carrerasDisponiblesText,
       waStage: "carreras_exploracion",
       needsHuman: false,
       createTask: false,
@@ -1873,7 +1859,7 @@ function buildIntentDecision(intent, config, contactContext = {}) {
       createTask: true,
     },
     carrera_no_ofertada: {
-      responseText: EVA_MEDICINA_NO_OFERTADA_RESPONSE,
+      responseText: notOfferedFallbackText,
       waStage: "carrera_no_ofertada",
       needsHuman: false,
       createTask: false,
@@ -2065,8 +2051,8 @@ function matchesDespedida(text, hasAny) {
   ]);
 }
 
-function matchesCarreraInteres(text, hasAny) {
-  if (hasAny(EVA_CAREER_NAMES)) return true;
+function matchesCarreraInteres(text, hasAny, careerKeywords = []) {
+  if (careerKeywords.length > 0 && hasAny(careerKeywords)) return true;
   if (
     hasAny([
       "informacion de una carrera",
@@ -2078,7 +2064,11 @@ function matchesCarreraInteres(text, hasAny) {
   ) {
     return true;
   }
-  if (hasAny(["me interesa", "quiero estudiar", "tienen"]) && hasAny(EVA_CAREER_NAMES)) {
+  if (
+    careerKeywords.length > 0 &&
+    hasAny(["me interesa", "quiero estudiar", "tienen"]) &&
+    hasAny(careerKeywords)
+  ) {
     return true;
   }
   return false;
@@ -2122,14 +2112,6 @@ function hasCareerConversationContext(contactContext = {}) {
     stage.includes("carrera") ||
     lastIntent.includes("carrera")
   );
-}
-
-function matchesCarreraNoOfertadaMedicina(text, hasAny) {
-  if (hasAny(["medicina", "medicida", "medico cirujano", "medico", "doctor"])) {
-    if (hasAny(["nutricion", "enfermeria", "psicologia"])) return false;
-    return true;
-  }
-  return false;
 }
 
 function matchesRevalidacionEstudios(text, hasAny) {
@@ -2301,25 +2283,26 @@ function detectMenuOption(rawText) {
   return { detected: false, menu_option_value: null, intent: null };
 }
 
-function returnIntent(intent, config, menuMeta = null, contactContext = {}) {
-  const decision = buildIntentDecision(intent, config, contactContext);
-  if (menuMeta?.detected) {
-    return {
-      ...decision,
-      menu_option_detected: true,
-      menu_option_value: menuMeta.menu_option_value,
-    };
-  }
-  return {
+function returnIntent(intent, config, menuMeta = null, contactContext = {}, catalogSot = null, overrides = {}) {
+  const decision = buildIntentDecision(intent, config, contactContext, catalogSot);
+  const merged = {
     ...decision,
-    menu_option_detected: false,
-    menu_option_value: null,
+    ...overrides,
+    menu_option_detected: menuMeta?.detected === true,
+    menu_option_value: menuMeta?.detected ? menuMeta.menu_option_value : null,
   };
+  if (!menuMeta?.detected) {
+    merged.menu_option_detected = false;
+    merged.menu_option_value = null;
+  }
+  return merged;
 }
 
-function classifyIntent(rawText, config, contactContext = {}) {
+function classifyIntent(rawText, config, contactContext = {}, catalogSot = null) {
+  const careerKeywords = catalogSot?.getOfficialCareerKeywords?.() || [];
+
   if (!rawText || !String(rawText).trim()) {
-    return returnIntent("sin_texto", config, null, contactContext);
+    return returnIntent("sin_texto", config, null, contactContext, catalogSot);
   }
 
   const corrected = applyTypoCorrections(rawText);
@@ -2327,88 +2310,101 @@ function classifyIntent(rawText, config, contactContext = {}) {
   const hasAny = (arr) => arr.some((t) => text.includes(cleanText(t)));
 
   if (matchesDudaTest(text, hasAny)) {
-    return returnIntent("duda_test", config, null, contactContext);
+    return returnIntent("duda_test", config, null, contactContext, catalogSot);
   }
 
   if (matchesPostTest(text, hasAny)) {
-    return returnIntent("post_test", config, null, contactContext);
+    return returnIntent("post_test", config, null, contactContext, catalogSot);
   }
 
   if (matchesHumano(text, hasAny)) {
-    return returnIntent("humano", config, null, contactContext);
+    return returnIntent("humano", config, null, contactContext, catalogSot);
   }
 
-  if (matchesCarreraNoOfertadaMedicina(text, hasAny)) {
-    return returnIntent("carrera_no_ofertada", config, null, contactContext);
+  const notOffered = catalogSot?.detectExpectedNotOfferedDemand?.(rawText);
+  if (notOffered) {
+    return returnIntent("carrera_no_ofertada", config, null, contactContext, catalogSot, {
+      responseText: notOffered.responseText,
+      not_offered_id: notOffered.id,
+      requested_career_raw: notOffered.label,
+    });
   }
 
   if (matchesRevalidacionEstudios(text, hasAny)) {
-    return returnIntent("revalidacion_estudios", config, null, contactContext);
+    return returnIntent("revalidacion_estudios", config, null, contactContext, catalogSot);
   }
 
   if (matchesNivelesNoPrincipales(text, hasAny)) {
-    return returnIntent("niveles_no_principales", config, null, contactContext);
+    return returnIntent("niveles_no_principales", config, null, contactContext, catalogSot);
   }
 
   if (matchesUbicacionCampus(text, hasAny)) {
-    return returnIntent("ubicacion_campus", config, null, contactContext);
+    return returnIntent("ubicacion_campus", config, null, contactContext, catalogSot);
   }
 
   if (matchesRvoeReconocimiento(text, hasAny)) {
-    return returnIntent("rvoe_reconocimiento", config, null, contactContext);
+    return returnIntent("rvoe_reconocimiento", config, null, contactContext, catalogSot);
   }
 
   if (matchesObjecionPrecio(text, hasAny, contactContext)) {
-    return returnIntent("objecion_precio", config, null, contactContext);
+    return returnIntent("objecion_precio", config, null, contactContext, catalogSot);
   }
 
   if (matchesPromocionesDescuentos(text, hasAny)) {
-    return returnIntent("promociones_descuentos", config, null, contactContext);
+    return returnIntent("promociones_descuentos", config, null, contactContext, catalogSot);
   }
 
   if (matchesBeca(text, hasAny)) {
-    return returnIntent("beca", config, null, contactContext);
+    return returnIntent("beca", config, null, contactContext, catalogSot);
   }
 
   if (matchesNoSeQueEstudiar(text, hasAny)) {
-    return returnIntent("no_se_que_estudiar", config, null, contactContext);
+    return returnIntent("no_se_que_estudiar", config, null, contactContext, catalogSot);
   }
 
   if (matchesCarrerasOnline(text, hasAny)) {
-    return returnIntent("carreras_online", config, null, contactContext);
+    return returnIntent("carreras_online", config, null, contactContext, catalogSot);
   }
 
   if (matchesCarrerasDisponibles(text, hasAny)) {
-    return returnIntent("carreras_disponibles", config, null, contactContext);
+    return returnIntent("carreras_disponibles", config, null, contactContext, catalogSot);
   }
 
-  if (matchesCarreraInteres(text, hasAny)) {
-    return returnIntent("carrera_interes", config, null, contactContext);
+  if (matchesCarreraInteres(text, hasAny, careerKeywords)) {
+    return returnIntent("carrera_interes", config, null, contactContext, catalogSot);
   }
 
   const menu = detectMenuOption(rawText);
   if (menu.detected) {
-    return returnIntent(menu.intent, config, menu, contactContext);
+    return returnIntent(menu.intent, config, menu, contactContext, catalogSot);
   }
 
   if (matchesAgradecimiento(text, hasAny)) {
-    return returnIntent("agradecimiento", config, null, contactContext);
+    return returnIntent("agradecimiento", config, null, contactContext, catalogSot);
   }
 
   if (matchesDespedida(text, hasAny)) {
-    return returnIntent("despedida", config, null, contactContext);
+    return returnIntent("despedida", config, null, contactContext, catalogSot);
   }
 
   if (matchesVagueGreeting(text, hasAny)) {
     const intent = shouldShowAmbiguoMenu(contactContext) ? "ambiguo" : "fallback_inteligente";
-    return returnIntent(intent, config, null, contactContext);
+    return returnIntent(intent, config, null, contactContext, catalogSot);
   }
 
-  return returnIntent("fallback_inteligente", config, null, contactContext);
+  return returnIntent("fallback_inteligente", config, null, contactContext, catalogSot);
 }
 
 let _academicEngineModules = null;
 let _ghlRelevanceGateModule = null;
+let _catalogSotModule = null;
+
+async function loadCatalogSotModule() {
+  if (!_catalogSotModule) {
+    _catalogSotModule = await import("./lib/academic-engine/catalog-sot.js");
+  }
+  return _catalogSotModule;
+}
 
 async function loadGhlRelevanceGateModule() {
   if (!_ghlRelevanceGateModule) {
@@ -3140,7 +3136,8 @@ module.exports = async function handler(request) {
       }
     }
 
-    const decision = classifyIntent(parsed.message_text, config, contactContext);
+    const catalogSot = await loadCatalogSotModule();
+    const decision = classifyIntent(parsed.message_text, config, contactContext, catalogSot);
     const enrichResult = await applyAcademicAndLlmEnrichment(
       decision,
       parsed.message_text,
