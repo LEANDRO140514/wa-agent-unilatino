@@ -1,0 +1,8 @@
+{
+  "package": "@curdeeclau/algorithmus-core-engine/pure",
+  "source_repo": "curdeeclau-monorepo",
+  "source_commit": "e210dad",
+  "vendored_at": "2026-07-12T10:52:25Z",
+  "phase": "9a",
+  "rule": "No editar a mano. Regenerar desde el monorepo con el grafo de dist/pure.js."
+}
