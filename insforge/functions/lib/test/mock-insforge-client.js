@@ -9,6 +9,7 @@ const tables = {
   wa_contacts_state: [],
   wa_ghl_sync_log: [],
   wa_llm_shadow_log: [],
+  wa_core_shadow_log: [],
   wa_errors: [],
 };
 
@@ -189,6 +190,7 @@ export function getMockInsforgeStore() {
     wa_contacts_state: [...tables.wa_contacts_state],
     wa_ghl_sync_log: [...tables.wa_ghl_sync_log],
     wa_llm_shadow_log: [...tables.wa_llm_shadow_log],
+    wa_core_shadow_log: [...tables.wa_core_shadow_log],
     wa_errors: [...tables.wa_errors],
   };
 }

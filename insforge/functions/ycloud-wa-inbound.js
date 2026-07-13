@@ -181,6 +181,8 @@ function getConfig() {
     ffNotOffered: Deno.env.get("FF_NOT_OFFERED") !== "false",
     ffFallbacks: Deno.env.get("FF_FALLBACKS") !== "false",
     ffEscalationV2: Deno.env.get("FF_ESCALATION_V2") !== "false",
+    // FASE 9B — opt-in explícito (=== "true"), a diferencia de los FF_ legacy
+    ffCoreShadow: Deno.env.get("FF_CORE_SHADOW") === "true",
   };
 }
 
@@ -2474,6 +2476,15 @@ async function loadFsmLiteModule() {
   return _fsmLiteModule;
 }
 
+let _coreShadowModule = null;
+
+async function loadCoreShadowModule() {
+  if (!_coreShadowModule) {
+    _coreShadowModule = await import("./lib/core-shadow/index.js");
+  }
+  return _coreShadowModule;
+}
+
 async function loadNotOfferedResolverModule() {
   if (!_notOfferedResolverModule) {
     _notOfferedResolverModule = await import("./lib/academic-engine/notOfferedResolver.js");
@@ -3543,6 +3554,30 @@ module.exports = async function handler(request) {
         "[eva_cag_assistive_shadow_error]",
         String(cagAssistiveErr?.message || "cag_assistive_shadow_failed").slice(0, 200),
       );
+    }
+
+    // FASE 9B — juez de core-engine en sombra (SHADOW-1: no toca la decisión)
+    if (config.ffCoreShadow) {
+      try {
+        const coreShadow = await loadCoreShadowModule();
+        await coreShadow.maybeLogCoreShadowComparison({
+          config,
+          client,
+          // Estado PREVIO al mensaje (premisa del juez). Nunca usar
+          // enrichedDecision.fsm_state: ese es el estado DESTINO y haría
+          // circular la evaluación (la decisión juzgándose a sí misma).
+          evaState: contactContext?.fsm_state || null,
+          userMessage: parsed.message_text,
+          decision: enrichedDecision,
+          inboundMessageId: inboundId,
+          normalizedPhone: normalizedPhone || parsed.from || null,
+        });
+      } catch (coreShadowErr) {
+        console.warn(
+          "[core_shadow_error]",
+          String(coreShadowErr?.message || "core_shadow_failed").slice(0, 200),
+        );
+      }
     }
 
     if (config.evaLlmEnabled && enrichedDecision.llm_meta && inboundId) {
