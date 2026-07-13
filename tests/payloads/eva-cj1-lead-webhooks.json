@@ -1,0 +1,8 @@
+{
+  "description": "EVA-CJ-1 — eventos canónicos de las landings hacia GHL (§17), payloads sanitizados",
+  "eventos": [
+    { "event_id": "cj1-ev-0001", "event_type": "lead_submitted", "occurred_at": "2026-07-13T00:00:00Z", "source": "landing_carreras", "capture_method": "formulario_landing", "entry_context": "exploracion_carreras", "contact": { "first_name": "Nombre", "last_name": null, "phone": "+529991234567", "email": null }, "journey": { "topic": "carreras", "status": "lead_capturado", "next_action": "consultar_carrera" }, "metadata": {} },
+    { "event_id": "cj1-ev-0002", "event_type": "scholarship_calculated", "occurred_at": "2026-07-13T00:05:00Z", "source": "landing_carreras", "capture_method": "calculadora_becas", "entry_context": "calculadora_becas", "contact": { "first_name": null, "last_name": null, "phone": "+529991234567", "email": null }, "journey": { "topic": "becas_promocion", "status": "beca_calculada", "next_action": "confirmar_beneficio" }, "metadata": { "promedio": "9.60-10.00", "beca_estimada": "nivel", "nota": "la calculadora NO escribe campos del test" } },
+    { "event_id": "cj1-ev-0003", "event_type": "test_completed", "occurred_at": "2026-07-13T00:10:00Z", "source": "test_vocacional", "capture_method": "finalizacion_test", "entry_context": "post_test", "contact": { "first_name": "Nombre", "last_name": null, "phone": "+529991234567", "email": "x@example.com" }, "journey": { "topic": "orientacion_vocacional", "status": "test_completado", "next_action": "revisar_resultado" }, "metadata": { "authorizedTestSource": true } }
+  ]
+}

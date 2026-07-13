@@ -1,0 +1,12 @@
+{
+  "description": "EVA-CJ-1 — prefills canónicos de las tres fuentes (§13) y variantes de tolerancia",
+  "cases": [
+    { "id": "wa_directo", "text": "Hola", "expected": { "eva_fuente_lead": "eva_wa", "eva_metodo_captura": "whatsapp_directo", "menu": "root" } },
+    { "id": "carreras_cta", "text": "Hola Eva, vengo de la página de carreras y quiero información.", "expected": { "eva_fuente_lead": "landing_carreras", "eva_metodo_captura": "whatsapp_cta", "eva_contexto_entrada": "exploracion_carreras", "menu": "from_careers" } },
+    { "id": "carreras_cta_sin_acentos", "text": "hola eva vengo de la pagina de carreras y quiero informacion", "expected": { "eva_fuente_lead": "landing_carreras", "menu": "from_careers" } },
+    { "id": "calculadora_cta", "text": "Hola Eva, estoy revisando la calculadora de becas y quiero ayuda.", "expected": { "eva_fuente_lead": "landing_carreras", "eva_contexto_entrada": "calculadora_becas", "menu": "from_calculator" } },
+    { "id": "test_cta", "text": "Hola Eva, vengo del test vocacional y necesito orientación.", "expected": { "eva_fuente_lead": "test_vocacional", "eva_contexto_entrada": "orientacion_vocacional", "menu": "from_test" } },
+    { "id": "post_test_cta", "text": "Hola Eva, ya hice el test vocacional y quiero revisar mi resultado.", "expected": { "eva_fuente_lead": "test_vocacional", "eva_contexto_entrada": "post_test", "menu": "from_test" } },
+    { "id": "ambiguo", "text": "buenas tardes", "expected": { "eva_fuente_lead": "eva_wa", "eva_contexto_entrada": "contacto_directo", "menu": "root" } }
+  ]
+}

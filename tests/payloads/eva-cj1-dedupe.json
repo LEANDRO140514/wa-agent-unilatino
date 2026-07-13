@@ -1,0 +1,11 @@
+{
+  "description": "EVA-CJ-1 — deduplicación por identidad (§18)",
+  "orden_identidad": ["telefono_e164", "contact_id_explicito", "email_normalizado", "NUNCA_por_nombre"],
+  "variantes_mismo_telefono": ["9991234567", "529991234567", "+529991234567", "+52 999 123 4567"],
+  "e164_esperado": "+529991234567",
+  "casos": [
+    { "id": "wa_y_landing", "fuentes": ["eva_wa", "landing_carreras"], "expected_contacts": 1, "expected_fuente_final": "primera establecida" },
+    { "id": "test_y_wa", "fuentes": ["test_vocacional", "eva_wa"], "expected_contacts": 1 },
+    { "id": "solo_nombre", "coincide": "nombre", "expected": "NO fusionar" }
+  ]
+}

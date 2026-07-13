@@ -183,6 +183,10 @@ function getConfig() {
     ffEscalationV2: Deno.env.get("FF_ESCALATION_V2") !== "false",
     // FASE 9B — opt-in explícito (=== "true"), a diferencia de los FF_ legacy
     ffCoreShadow: Deno.env.get("FF_CORE_SHADOW") === "true",
+    // EVA-CJ-1 — journey dirigido y atribución (§4): defaults false, opt-in
+    evaGuidedJourneyEnabled: Deno.env.get("EVA_GUIDED_JOURNEY_ENABLED") === "true",
+    evaLeadAttributionEnabled: Deno.env.get("EVA_LEAD_ATTRIBUTION_ENABLED") === "true",
+    ghlWriteJourneyFields: Deno.env.get("GHL_WRITE_JOURNEY_FIELDS") === "true",
   };
 }
 
@@ -2485,6 +2489,15 @@ async function loadCoreShadowModule() {
   return _coreShadowModule;
 }
 
+let _customerJourneyModule = null;
+
+async function loadCustomerJourneyModule() {
+  if (!_customerJourneyModule) {
+    _customerJourneyModule = await import("./lib/customer-journey/index.js");
+  }
+  return _customerJourneyModule;
+}
+
 async function loadNotOfferedResolverModule() {
   if (!_notOfferedResolverModule) {
     _notOfferedResolverModule = await import("./lib/academic-engine/notOfferedResolver.js");
@@ -3093,6 +3106,14 @@ async function upsertContactState(
 
   if (Object.prototype.hasOwnProperty.call(decision, "closed_by_agent")) {
     contactPayload.closed_by_agent = decision.closed_by_agent;
+  }
+
+  // EVA-CJ-1 — persistencia ADITIVA de journey/atribución (§14, §21).
+  // Solo con flag on (las columnas requieren la migración de esta fase).
+  if (config.evaGuidedJourneyEnabled && decision.cj_state_patch) {
+    for (const [k, v] of Object.entries(decision.cj_state_patch)) {
+      if (v !== undefined) contactPayload[k] = v;
+    }
   } else if (config.ffFsm !== false && decision.fsm_state === "HUMANO") {
     contactPayload.closed_by_agent = false;
   }
@@ -3350,6 +3371,62 @@ module.exports = async function handler(request) {
       }
     }
 
+    // EVA-CJ-1 — journey dirigido (§14): resuelve navegación de menú ANTES
+    // de classifyIntent. handled:false → texto libre sigue el flujo normal.
+    // No altera el orden crítico: corre después de opt-out/not-offered/context.
+    let cjTurn = null;
+    if (!decision && config.evaGuidedJourneyEnabled) {
+      try {
+        const cj = await loadCustomerJourneyModule();
+        let journeyContext = {};
+        if (normalizedPhone) {
+          const { data: jc } = await client.database
+            .from("wa_contacts_state")
+            .select(
+              "menu_state, menu_version, menu_last_action, menu_updated_at, eva_fuente_lead, eva_metodo_captura, eva_contexto_entrada, eva_ultimo_touch, eva_tema_atencion, eva_estado_journey, eva_siguiente_accion",
+            )
+            .eq("normalized_phone", normalizedPhone)
+            .maybeSingle();
+          journeyContext = jc || {};
+        }
+        cjTurn = cj.resolveGuidedJourneyTurn({
+          rawText: parsed.message_text,
+          journeyContext,
+          isFirstContact: !prevContact,
+          nowIso: new Date().toISOString(),
+        });
+        if (cjTurn?.handled) {
+          if (cjTurn.delegateIntent) {
+            decision = returnIntent(cjTurn.delegateIntent, config, null, contactContext, catalogSot);
+            if (cjTurn.appendUrl && decision?.responseText) {
+              decision.responseText = `${decision.responseText}\n\n${cjTurn.appendUrl}`;
+            }
+            if (cjTurn.createTaskOverride === false) decision.createTask = false;
+            if (cjTurn.inscripcionFlow) decision.cj_inscripcion = true;
+          } else {
+            decision = {
+              intent: cjTurn.intent || "menu_journey",
+              responseText: cjTurn.replyText,
+              needsHuman: false,
+              createTask: cjTurn.createTask === true,
+              waStage: contactContext.wa_stage || "inicio",
+              menu_option_detected: cjTurn.mode !== "root_menu" && cjTurn.mode !== "contextual_menu",
+              menu_option_value: null,
+            };
+          }
+          decision.cj_state_patch = {
+            ...(cjTurn.statePatch || {}),
+            ...(config.evaLeadAttributionEnabled ? cjTurn.attributionPatch || {} : {}),
+          };
+          decision.cj_mode = cjTurn.mode;
+        }
+      } catch (cjErr) {
+        console.warn("[eva_cj1_error]", String(cjErr?.message || "cj_failed").slice(0, 200));
+        cjTurn = null;
+      }
+    }
+
+
     if (!decision && config.ffNotOffered !== false) {
       const notOffered = await loadNotOfferedResolverModule();
       const notOfferedTurn = notOffered.resolveNotOfferedTurn({
@@ -3389,6 +3466,21 @@ module.exports = async function handler(request) {
       decision = classifyIntent(parsed.message_text, config, contactContext, catalogSot, {
         skipNotOfferedPipeline: config.ffNotOffered !== false,
       });
+    }
+
+    // EVA-CJ-1 §5-7 — la ATRIBUCIÓN es independiente de qué módulo resolvió
+    // el turno (opt-out, not-offered, journey o classifyIntent): en el primer
+    // contacto siempre se deriva y persiste la primera fuente identificable.
+    if (config.evaGuidedJourneyEnabled && config.evaLeadAttributionEnabled && !prevContact && decision) {
+      try {
+        const cjA = await loadCustomerJourneyModule();
+        const det = cjA.detectSourceFromMessage(parsed.message_text);
+        const { deriveAttributionPatch } = await import("./lib/customer-journey/journeyMerge.js");
+        const attr = deriveAttributionPatch({}, det, new Date().toISOString());
+        decision.cj_state_patch = { ...(attr || {}), ...(decision.cj_state_patch || {}) };
+      } catch (attrErr) {
+        console.warn("[eva_cj1_attr_error]", String(attrErr?.message || "attr_failed").slice(0, 120));
+      }
     }
 
     if (config.ffFallbacks !== false) {

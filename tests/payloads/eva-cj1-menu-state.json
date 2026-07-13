@@ -1,0 +1,17 @@
+{
+  "description": "EVA-CJ-1 — navegación por estado de menú (§14)",
+  "cases": [
+    { "menu_state": "root", "input": "1", "expected_next": "career_options", "tema": "carreras" },
+    { "menu_state": "root", "input": "2", "expected_intent": "no_se_que_estudiar" },
+    { "menu_state": "root", "input": "3", "expected_intent": "beca" },
+    { "menu_state": "root", "input": "4", "expected_next": "info_catalog" },
+    { "menu_state": "root", "input": "5", "expected_intent": "humano" },
+    { "menu_state": "from_careers", "input": "2", "expected_intent": "beca", "nota": "costos/becas contextual, no beca global incorrecta" },
+    { "menu_state": "from_calculator", "input": "3", "expected_intent": "humano", "next_action": "confirmar_beneficio" },
+    { "menu_state": "from_test", "input": "3", "expected_journey": "test_completado" },
+    { "menu_state": null, "input": "1", "expected_intent": "carreras_disponibles", "nota": "compatibilidad legacy §14.2" },
+    { "menu_state": "*", "input": "0|menu|menú|inicio|volver", "expected": "root" },
+    { "menu_state": "*", "input": "asesor|carreras|beca|test|requisitos|ubicacion", "expected": "comando permanente" }
+  ],
+  "ttl_horas": 24
+}
