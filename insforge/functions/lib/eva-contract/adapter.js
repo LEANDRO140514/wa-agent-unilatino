@@ -182,40 +182,68 @@ function resolveHandoff(decision) {
   };
 }
 
+function memoryUpdate(key, value) {
+  return {
+    section: "business_state",
+    key,
+    value,
+    evidence: null,
+  };
+}
+
 function buildMemoryUpdates({ decision, academicState, qualification }) {
   const updates = [];
 
   if (qualification.career_key) {
-    updates.push({ field: "career_key", value: qualification.career_key });
+    updates.push(memoryUpdate("career_key", qualification.career_key));
   }
   if (qualification.modality_key) {
-    updates.push({ field: "modality_key", value: qualification.modality_key });
+    updates.push(memoryUpdate("modality_key", qualification.modality_key));
   }
   if (decision?.intent) {
-    updates.push({ field: "last_intent", value: decision.intent });
+    updates.push(memoryUpdate("last_intent", decision.intent));
   }
   if (academicState?.last_objection) {
-    updates.push({ field: "last_objection", value: academicState.last_objection });
+    updates.push(memoryUpdate("last_objection", academicState.last_objection));
   }
   // admission_stage: copia directa de waStage (sin reclasificar) — solo
   // cuando el runtime ya trae ese hecho estructurado.
   if (decision?.waStage) {
-    updates.push({ field: "admission_stage", value: decision.waStage });
+    updates.push(memoryUpdate("admission_stage", decision.waStage));
   }
 
   return updates;
 }
 
+function proposedAction(type, extras = {}) {
+  return {
+    type,
+    reason: extras.reason ?? null,
+    preferred_date: extras.preferred_date ?? null,
+    preferred_time_window: extras.preferred_time_window ?? null,
+    note: extras.note ?? null,
+  };
+}
+
 function buildProposedActions({ handoff, qualification, decision }) {
   const actions = [];
 
-  if (handoff.requested) actions.push("handoff_human");
-  if (qualification.status === "known") actions.push("qualification_complete");
-  // Única señal estructurada inequívoca de agendamiento disponible hoy:
-  // escalation_reason "appointment" (ESCALATION_REASONS existente).
-  if (decision?.escalation_reason === "appointment") actions.push("schedule_requested");
+  if (handoff.requested) {
+    actions.push(
+      proposedAction("handoff_human", {
+        reason: handoff.reason,
+        note: handoff.note,
+      }),
+    );
+  }
+  if (qualification.status === "known") {
+    actions.push(proposedAction("qualification_complete"));
+  }
+  if (decision?.escalation_reason === "appointment") {
+    actions.push(proposedAction("schedule_requested", { reason: "appointment" }));
+  }
 
-  if (actions.length === 0) actions.push("no_action");
+  if (actions.length === 0) actions.push(proposedAction("no_action"));
   return actions;
 }
 

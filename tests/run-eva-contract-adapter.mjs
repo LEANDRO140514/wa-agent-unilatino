@@ -31,6 +31,51 @@ function deepEqual(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+const ACTION_TYPES = new Set([
+  "handoff_human",
+  "schedule_requested",
+  "follow_up_requested",
+  "qualification_complete",
+  "no_action",
+]);
+const ACTION_SHAPE_KEYS = ["type", "reason", "preferred_date", "preferred_time_window", "note"];
+const MEMORY_SHAPE_KEYS = ["section", "key", "value", "evidence"];
+
+function actionOf(actions, type) {
+  return (actions || []).find((a) => a && a.type === type) || null;
+}
+
+function isActionObject(a) {
+  if (!a || typeof a !== "object" || Array.isArray(a)) return false;
+  const keys = Object.keys(a);
+  return (
+    keys.length === ACTION_SHAPE_KEYS.length &&
+    ACTION_SHAPE_KEYS.every((k) => Object.hasOwn(a, k)) &&
+    ACTION_TYPES.has(a.type)
+  );
+}
+
+function isMemoryUpdateObject(u) {
+  if (!u || typeof u !== "object" || Array.isArray(u)) return false;
+  const keys = Object.keys(u);
+  return (
+    keys.length === MEMORY_SHAPE_KEYS.length &&
+    MEMORY_SHAPE_KEYS.every((k) => Object.hasOwn(u, k)) &&
+    u.section === "business_state" &&
+    EVA_CONTRACT_MEMORY_ALLOWLIST.includes(u.key) &&
+    u.evidence === null
+  );
+}
+
+function nullActionFields() {
+  return {
+    reason: null,
+    preferred_date: null,
+    preferred_time_window: null,
+    note: null,
+  };
+}
+
 // ── 11. adapter copia final responseText a reply ────────────────────
 {
   const c = buildEvaContract({
@@ -86,7 +131,7 @@ function deepEqual(a, b) {
   );
   check(
     "13b. needsHuman=true -> proposed_actions incluye handoff_human",
-    c.proposed_actions.includes("handoff_human"),
+    Boolean(actionOf(c.proposed_actions, "handoff_human")),
     JSON.stringify(c.proposed_actions),
   );
 }
@@ -118,7 +163,7 @@ function deepEqual(a, b) {
   );
   check(
     "14b. needsHuman=false -> proposed_actions NO incluye handoff_human",
-    !c.proposed_actions.includes("handoff_human"),
+    actionOf(c.proposed_actions, "handoff_human") === null,
     JSON.stringify(c.proposed_actions),
   );
 }
@@ -131,7 +176,7 @@ function deepEqual(a, b) {
   });
   check(
     "15. qualification known -> proposed_actions incluye qualification_complete",
-    c.qualification.status === "known" && c.proposed_actions.includes("qualification_complete"),
+    c.qualification.status === "known" && Boolean(actionOf(c.proposed_actions, "qualification_complete")),
     JSON.stringify({ qualification: c.qualification, actions: c.proposed_actions }),
   );
 }
@@ -143,8 +188,8 @@ function deepEqual(a, b) {
     academicState: {},
   });
   check(
-    "16. sin señales -> proposed_actions === ['no_action']",
-    deepEqual(c.proposed_actions, ["no_action"]),
+    "16. sin señales -> proposed_actions === [no_action objeto exclusivo]",
+    deepEqual(c.proposed_actions, [{ type: "no_action", ...nullActionFields() }]),
     JSON.stringify(c.proposed_actions),
   );
 }
@@ -155,7 +200,7 @@ function deepEqual(a, b) {
   });
   check(
     "16b. con señales -> no_action nunca aparece junto a otras acciones",
-    !c.proposed_actions.includes("no_action") && c.proposed_actions.length > 0,
+    actionOf(c.proposed_actions, "no_action") === null && c.proposed_actions.length > 0,
     JSON.stringify(c.proposed_actions),
   );
 }
@@ -212,12 +257,17 @@ function deepEqual(a, b) {
       last_objection: "precio_alto",
     },
   });
-  const fields = c.memory_updates.map((u) => u.field);
-  const outsideAllowlist = fields.filter((f) => !EVA_CONTRACT_MEMORY_ALLOWLIST.includes(f));
+  const keys = c.memory_updates.map((u) => u.key);
+  const outsideAllowlist = keys.filter((k) => !EVA_CONTRACT_MEMORY_ALLOWLIST.includes(k));
   check(
-    "18. todos los memory_updates.field están en el allowlist",
-    outsideAllowlist.length === 0 && fields.length > 0,
-    JSON.stringify(fields),
+    "18. todos los memory_updates.key están en el allowlist",
+    outsideAllowlist.length === 0 && keys.length > 0,
+    JSON.stringify(keys),
+  );
+  check(
+    "18b. memory_updates shape section/key/value/evidence y section=business_state",
+    c.memory_updates.length > 0 && c.memory_updates.every(isMemoryUpdateObject),
+    JSON.stringify(c.memory_updates),
   );
 }
 
@@ -301,7 +351,7 @@ function deepEqual(a, b) {
   );
   check(
     "Extra: handoff.requested=false -> no handoff_human en proposed_actions y reason null",
-    c.handoff.requested === false && c.handoff.reason === null && !c.proposed_actions.includes("handoff_human"),
+    c.handoff.requested === false && c.handoff.reason === null && actionOf(c.proposed_actions, "handoff_human") === null,
     JSON.stringify(c),
   );
   check(
@@ -432,6 +482,158 @@ function deepEqual(a, b) {
       c.qualification.evidence.length === 1 &&
       c.qualification.evidence[0].text === "quiero estudiar derecho presencial",
     JSON.stringify(c.qualification),
+  );
+}
+
+// ── REGRESSION EVA-CONTRACT-V1 CONSOLE SHAPE ───────────────────────
+{
+  const c = buildEvaContract({
+    decision: {
+      responseText: "te canalizo",
+      intent: "humano",
+      needsHuman: true,
+      escalation_reason: "human_requested",
+      waStage: "humano",
+    },
+    academicState: {
+      current_career: "Gastronomía",
+      current_modality: "presencial",
+      last_objection: "precio_alto",
+    },
+  });
+
+  check(
+    "R-S1. proposed_actions son objetos estrictos con type/reason/date/window/note",
+    Array.isArray(c.proposed_actions) &&
+      c.proposed_actions.length > 0 &&
+      c.proposed_actions.every(isActionObject),
+    JSON.stringify(c.proposed_actions),
+  );
+
+  const handoffAction = actionOf(c.proposed_actions, "handoff_human");
+  check(
+    "R-S2. handoff_human presente iff handoff.requested y copia reason/note",
+    c.handoff.requested === true &&
+      Boolean(handoffAction) &&
+      handoffAction.reason === c.handoff.reason &&
+      handoffAction.note === c.handoff.note,
+    JSON.stringify({ handoff: c.handoff, action: handoffAction }),
+  );
+
+  const qualAction = actionOf(c.proposed_actions, "qualification_complete");
+  check(
+    "R-S3. qualification_complete es objeto con campos no aplicables null",
+    Boolean(qualAction) &&
+      qualAction.reason === null &&
+      qualAction.preferred_date === null &&
+      qualAction.preferred_time_window === null &&
+      qualAction.note === null,
+    JSON.stringify(qualAction),
+  );
+
+  check(
+    "R-S4. no_action no se combina con otras acciones",
+    actionOf(c.proposed_actions, "no_action") === null,
+    JSON.stringify(c.proposed_actions),
+  );
+
+  check(
+    "R-S5. memory_updates section=business_state, allowlist, evidence null, sin relationship_*",
+    c.memory_updates.length > 0 &&
+      c.memory_updates.every(isMemoryUpdateObject) &&
+      c.memory_updates.every((u) => u.section === "business_state") &&
+      !c.memory_updates.some((u) => u.key === "relationship_facts" || u.key === "relationship_summary"),
+    JSON.stringify(c.memory_updates),
+  );
+}
+
+{
+  const c = buildEvaContract({
+    decision: {
+      responseText: "agendemos",
+      intent: "carrera_interes",
+      needsHuman: false,
+      escalation_reason: "appointment",
+    },
+  });
+  const sched = actionOf(c.proposed_actions, "schedule_requested");
+  check(
+    "R-S6. schedule_requested reason=appointment y no inventa fecha/hora",
+    Boolean(sched) &&
+      isActionObject(sched) &&
+      sched.reason === "appointment" &&
+      sched.preferred_date === null &&
+      sched.preferred_time_window === null &&
+      sched.note === null,
+    JSON.stringify(c.proposed_actions),
+  );
+}
+
+{
+  const c = buildEvaContract({
+    decision: { responseText: "x", intent: "greeting_no_reconocido", needsHuman: false },
+  });
+  check(
+    "R-S7. intent desconocido conserva key cruda y status unknown",
+    c.intent.key === "greeting_no_reconocido" && c.intent.status === "unknown",
+    JSON.stringify(c.intent),
+  );
+  check(
+    "R-S7b. intent ausente sigue key null / unknown",
+    (() => {
+      const empty = buildEvaContract({ decision: { responseText: "x", intent: null } });
+      return empty.intent.key === null && empty.intent.status === "unknown";
+    })(),
+  );
+}
+
+{
+  const c = buildEvaContract({
+    decision: {
+      responseText: "hola",
+      intent: "humano",
+      needsHuman: true,
+      ghl_tags: ["wa_needs_human"],
+      operational_owner: "asesor-1",
+      ycloud_message_id: "yc-1",
+      whatsapp_from: "521555",
+    },
+  });
+  const serialized = JSON.stringify(c).toLowerCase();
+  const forbidden = [
+    "ghl",
+    "owner",
+    "assignee",
+    "provider",
+    "dedupe",
+    "ycloud",
+    "whatsapp",
+    "token",
+    "secret",
+    "credential",
+  ];
+  const leaked = forbidden.filter((word) => serialized.includes(word));
+  check(
+    "R-S8. sin campos GHL/owner/assignee/provider/dedupe/ycloud/whatsapp/token/secret",
+    leaked.length === 0,
+    leaked.join(", "),
+  );
+}
+
+{
+  const input = {
+    decision: {
+      responseText: "misma",
+      intent: "beca",
+      needsHuman: true,
+      escalation_reason: "appointment",
+      waStage: "beca_interes",
+    },
+    academicState: { current_career: "Nutrición", current_modality: "presencial" },
+  };
+  check(
+    "R-S9. shape Console es determinístico",
+    deepEqual(buildEvaContract(input), buildEvaContract(JSON.parse(JSON.stringify(input)))),
   );
 }
 
