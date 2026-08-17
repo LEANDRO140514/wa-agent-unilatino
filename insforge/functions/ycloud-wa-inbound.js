@@ -3161,6 +3161,31 @@ async function upsertContactState(
   }
 }
 
+async function runEvaSemanticTurnBound(input = {}) {
+  const { runEvaSemanticTurn } = await import("./lib/eva-runtime/run-eva-semantic-turn.js");
+  const config = input.config ?? getConfig();
+  const catalogSot = input.catalogSot ?? (await loadCatalogSotModule());
+  return runEvaSemanticTurn(
+    {
+      ...input,
+      config,
+      catalogSot,
+    },
+    {
+      classifyIntent,
+      returnIntent,
+      enrichDecisionWithOperational,
+      applyAcademicAndLlmEnrichment,
+      loadOptOutHandlerModule,
+      loadCustomerJourneyModule,
+      loadNotOfferedResolverModule,
+      loadContextMemoryModule,
+      loadFallbacksLiteModule,
+      loadFsmLiteModule,
+    },
+  );
+}
+
 module.exports = async function handler(request) {
   const config = getConfig();
 
@@ -3345,188 +3370,38 @@ module.exports = async function handler(request) {
     }
 
     const catalogSot = await loadCatalogSotModule();
-    let decision = null;
-    let ghlSuppressSideEffects = false;
-
-    if (config.ffNoContact !== false) {
-      const optOut = await loadOptOutHandlerModule();
-      const optTurn = optOut.resolveOptOutTurn({
-        rawText: parsed.message_text,
-        contactContext,
-        academicState,
-      });
-      academicState = optOut.mergeAcademicStatePatch(academicState, optTurn.academicStatePatch);
-
-      if (optTurn.action === "execute_opt_out") {
-        decision = enrichDecisionWithOperational(
-          optOut.buildOptOutDecision(parsed.message_text),
-        );
-      } else if (optTurn.action === "ask_confirmation") {
-        decision = enrichDecisionWithOperational(optTurn.decision);
-        ghlSuppressSideEffects = true;
-      } else if (optTurn.action === "re_opt_in") {
-        decision = enrichDecisionWithOperational(optTurn.decision);
-      } else if (optTurn.ghlSuppress === true) {
-        ghlSuppressSideEffects = true;
-      }
-    }
-
-    // EVA-CJ-1 — journey dirigido (§14): resuelve navegación de menú ANTES
-    // de classifyIntent. handled:false → texto libre sigue el flujo normal.
-    // No altera el orden crítico: corre después de opt-out/not-offered/context.
-    let cjTurn = null;
-    if (!decision && config.evaGuidedJourneyEnabled) {
-      try {
-        const cj = await loadCustomerJourneyModule();
-        let journeyContext = {};
-        if (normalizedPhone) {
-          const { data: jc } = await client.database
-            .from("wa_contacts_state")
-            .select(
-              "menu_state, menu_version, menu_last_action, menu_updated_at, eva_fuente_lead, eva_metodo_captura, eva_contexto_entrada, eva_ultimo_touch, eva_tema_atencion, eva_estado_journey, eva_siguiente_accion",
-            )
-            .eq("normalized_phone", normalizedPhone)
-            .maybeSingle();
-          journeyContext = jc || {};
-        }
-        cjTurn = cj.resolveGuidedJourneyTurn({
-          rawText: parsed.message_text,
-          journeyContext,
-          isFirstContact: !prevContact,
-          nowIso: new Date().toISOString(),
-        });
-        if (cjTurn?.handled) {
-          if (cjTurn.delegateIntent) {
-            decision = returnIntent(cjTurn.delegateIntent, config, null, contactContext, catalogSot);
-            if (cjTurn.appendUrl && decision?.responseText) {
-              decision.responseText = `${decision.responseText}\n\n${cjTurn.appendUrl}`;
-            }
-            if (cjTurn.createTaskOverride === false) decision.createTask = false;
-            if (cjTurn.inscripcionFlow) decision.cj_inscripcion = true;
-          } else {
-            decision = {
-              intent: cjTurn.intent || "menu_journey",
-              responseText: cjTurn.replyText,
-              needsHuman: false,
-              createTask: cjTurn.createTask === true,
-              waStage: contactContext.wa_stage || "inicio",
-              menu_option_detected: cjTurn.mode !== "root_menu" && cjTurn.mode !== "contextual_menu",
-              menu_option_value: null,
-            };
-          }
-          decision.cj_state_patch = {
-            ...(cjTurn.statePatch || {}),
-            ...(config.evaLeadAttributionEnabled ? cjTurn.attributionPatch || {} : {}),
-          };
-          decision.cj_mode = cjTurn.mode;
-        }
-      } catch (cjErr) {
-        console.warn("[eva_cj1_error]", String(cjErr?.message || "cj_failed").slice(0, 200));
-        cjTurn = null;
-      }
-    }
-
-
-    if (!decision && config.ffNotOffered !== false) {
-      const notOffered = await loadNotOfferedResolverModule();
-      const notOfferedTurn = notOffered.resolveNotOfferedTurn({
-        rawText: parsed.message_text,
-        academicState,
-        config,
-      });
-      academicState = notOffered.mergeAcademicStatePatch(
-        academicState,
-        notOfferedTurn.academicStatePatch,
-      );
-
-      if (notOfferedTurn.action === "decision" && notOfferedTurn.decision) {
-        decision = enrichDecisionWithOperational(notOfferedTurn.decision);
-      }
-      if (notOfferedTurn.ghlSuppress === true) {
-        ghlSuppressSideEffects = true;
-      }
-    }
-
-    if (!decision && config.ffFallbacks !== false) {
-      const ctxMem = await loadContextMemoryModule();
-      const ctxTurn = ctxMem.resolveContextMemoryTurn({
-        rawText: parsed.message_text,
-        academicState,
-        catalogSot,
-        config,
-      });
-      academicState = ctxMem.mergeAcademicStatePatch(academicState, ctxTurn.academicStatePatch);
-
-      if (ctxTurn.action === "decision" && ctxTurn.decision) {
-        decision = enrichDecisionWithOperational(ctxTurn.decision);
-      }
-    }
-
-    if (!decision) {
-      decision = classifyIntent(parsed.message_text, config, contactContext, catalogSot, {
-        skipNotOfferedPipeline: config.ffNotOffered !== false,
-      });
-    }
-
-    // EVA-CJ-1 §5-7 — la ATRIBUCIÓN es independiente de qué módulo resolvió
-    // el turno (opt-out, not-offered, journey o classifyIntent): en el primer
-    // contacto siempre se deriva y persiste la primera fuente identificable.
-    if (config.evaGuidedJourneyEnabled && config.evaLeadAttributionEnabled && !prevContact && decision) {
-      try {
-        const cjA = await loadCustomerJourneyModule();
-        const det = cjA.detectSourceFromMessage(parsed.message_text);
-        const { deriveAttributionPatch } = await import("./lib/customer-journey/journeyMerge.js");
-        const attr = deriveAttributionPatch({}, det, new Date().toISOString());
-        decision.cj_state_patch = { ...(attr || {}), ...(decision.cj_state_patch || {}) };
-      } catch (attrErr) {
-        console.warn("[eva_cj1_attr_error]", String(attrErr?.message || "attr_failed").slice(0, 120));
-      }
-    }
-
-    if (config.ffFallbacks !== false) {
-      const fallbacks = await loadFallbacksLiteModule();
-      const lastOutboundText =
-        academicState?.last_outbound_text ||
-        prevContact?.wa_last_outbound_text ||
-        "";
-      const fbTurn = fallbacks.resolveFallbackTurn({
-        rawText: parsed.message_text,
-        decision,
-        fallbackCount,
-        academicState,
-        contactContext,
-        lastOutboundText,
-        config,
-      });
-      decision = enrichDecisionWithOperational(fbTurn.decision);
-      fallbackCount = fbTurn.fallbackCount;
-      academicState = fallbacks.mergeAcademicStatePatch(academicState, fbTurn.academicStatePatch);
-      decision.fallback_count = fallbackCount;
-    }
-
-    if (decision.ghlSuppress === true) {
-      ghlSuppressSideEffects = true;
-    }
-    const enrichResult = await applyAcademicAndLlmEnrichment(
-      decision,
-      parsed.message_text,
+    const semantic = await runEvaSemanticTurnBound({
+      rawText: parsed.message_text,
       config,
       academicState,
-    );
-    let enrichedDecision = enrichResult.decision;
-
-    if (config.ffFsm !== false) {
-      const fsm = await loadFsmLiteModule();
-      enrichedDecision = fsm.applyHumanoBehaviorGate(enrichedDecision, contactContext, config);
-      const fsmPatch = fsm.computeFsmTransition({
-        contactContext,
-        decision: enrichedDecision,
-        isNewContact: !prevContact,
-        lazyResetApplied: fsmLazyResetApplied,
-        config,
-      });
-      enrichedDecision = fsm.mergeFsmPatchIntoDecision(enrichedDecision, fsmPatch);
-    }
+      contactContext,
+      prevContact,
+      fallbackCount,
+      catalogSot,
+      nowIso,
+      fsmLazyResetApplied,
+      loadJourneyContext: async () => {
+        if (!normalizedPhone) return {};
+        const { data: jc } = await client.database
+          .from("wa_contacts_state")
+          .select(
+            "menu_state, menu_version, menu_last_action, menu_updated_at, eva_fuente_lead, eva_metodo_captura, eva_contexto_entrada, eva_ultimo_touch, eva_tema_atencion, eva_estado_journey, eva_siguiente_accion",
+          )
+          .eq("normalized_phone", normalizedPhone)
+          .maybeSingle();
+        return jc || {};
+      },
+    });
+    const decision = semantic.decision;
+    const ghlSuppressSideEffects = semantic.ghlSuppressSideEffects;
+    fallbackCount = semantic.fallbackCount;
+    academicState = semantic.academicState;
+    const enrichResult = {
+      decision: semantic.decision,
+      academicState: semantic.academicState,
+      academicMeta: semantic.academicMeta,
+    };
+    let enrichedDecision = semantic.decision;
 
     if (
       config.ffEscalationV2 !== false &&
@@ -3987,6 +3862,7 @@ handler.readContactAcademicStateDirect = readContactAcademicStateDirect;
 handler.patchContactAcademicStateDirect = patchContactAcademicStateDirect;
 handler.upsertContactState = upsertContactState;
 handler.applyAcademicAndLlmEnrichment = applyAcademicAndLlmEnrichment;
+handler.runEvaSemanticTurn = runEvaSemanticTurnBound;
 handler.logLlmShadowEntry = logLlmShadowEntry;
 handler.getConfig = getConfig;
 handler.parseGhlLiveAllowedPhones = parseGhlLiveAllowedPhones;
