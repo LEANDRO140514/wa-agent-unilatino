@@ -1,0 +1,8 @@
+{
+  "name": "wa-agent-unilatino-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "@insforge/sdk": "1.5.2"
+  }
+}
