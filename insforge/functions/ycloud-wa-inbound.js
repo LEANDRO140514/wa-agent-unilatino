@@ -157,6 +157,10 @@ function getConfig() {
     ghlLiveAllowedPhones: parseGhlLiveAllowedPhones(
       Deno.env.get("GHL_LIVE_ALLOWED_PHONES") || ""
     ),
+    // WA outbound allowlist — independent from GHL_LIVE_ALLOWED_PHONES (fail-closed when live)
+    waLiveAllowedPhones: parseWaLiveAllowedPhones(
+      Deno.env.get("WA_LIVE_ALLOWED_PHONES") || ""
+    ),
     academicEngineEnabled: Deno.env.get("ACADEMIC_ENGINE_ENABLED") === "true",
     evaLlmEnabled: Deno.env.get("EVA_LLM_ENABLED") === "true",
     evaLlmMode: Deno.env.get("LLM_MODE") || "off",
@@ -196,6 +200,65 @@ function parseGhlLiveAllowedPhones(raw) {
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function parseWaLiveAllowedPhones(raw) {
+  if (!raw || !String(raw).trim()) return [];
+  return String(raw)
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => normalizePhoneMX(entry) || entry);
+}
+
+function resolveWaLiveAllowlist(config, phone) {
+  const allowedPhones = config.waLiveAllowedPhones || [];
+  const count = allowedPhones.length;
+
+  if (config.mode !== "live_outbound") {
+    return {
+      applies: false,
+      allowlist_enabled: false,
+      allowlist_matched: null,
+      block_reason: null,
+      allowed: true,
+      allowed_phones_count: count,
+    };
+  }
+
+  const normalized = phone ? normalizePhoneMX(phone) || String(phone).trim() : "";
+
+  if (count === 0) {
+    return {
+      applies: true,
+      allowlist_enabled: true,
+      allowlist_matched: false,
+      block_reason: "blocked_allowlist_missing",
+      allowed: false,
+      allowed_phones_count: 0,
+    };
+  }
+
+  if (!normalized) {
+    return {
+      applies: true,
+      allowlist_enabled: true,
+      allowlist_matched: false,
+      block_reason: "blocked_allowlist_no_phone",
+      allowed: false,
+      allowed_phones_count: count,
+    };
+  }
+
+  const matched = allowedPhones.includes(normalized);
+  return {
+    applies: true,
+    allowlist_enabled: true,
+    allowlist_matched: matched,
+    block_reason: matched ? null : "blocked_allowlist_phone_not_allowed",
+    allowed: matched,
+    allowed_phones_count: count,
+  };
 }
 
 function resolveGhlLiveAllowlist(config, normalizedPhone) {
@@ -349,6 +412,24 @@ async function sendYCloudMessage({ config, to, text }) {
       mode: config.mode,
       reason: "outbound_disabled",
       dry_run: true,
+      endpoint: `${config.ycloudApiBaseUrl}/whatsapp/messages`,
+      request: payload,
+    };
+  }
+
+  const waAllowlist = resolveWaLiveAllowlist(config, to);
+  if (!waAllowlist.allowed) {
+    return {
+      sent: false,
+      outbound_real: false,
+      failed: false,
+      blocked: true,
+      mode: config.mode,
+      reason: waAllowlist.block_reason,
+      dry_run: true,
+      allowlist_enabled: waAllowlist.allowlist_enabled,
+      allowlist_matched: waAllowlist.allowlist_matched,
+      allowed_phones_count: waAllowlist.allowed_phones_count,
       endpoint: `${config.ycloudApiBaseUrl}/whatsapp/messages`,
       request: payload,
     };
@@ -3867,6 +3948,9 @@ handler.logLlmShadowEntry = logLlmShadowEntry;
 handler.getConfig = getConfig;
 handler.parseGhlLiveAllowedPhones = parseGhlLiveAllowedPhones;
 handler.resolveGhlLiveAllowlist = resolveGhlLiveAllowlist;
+handler.parseWaLiveAllowedPhones = parseWaLiveAllowedPhones;
+handler.resolveWaLiveAllowlist = resolveWaLiveAllowlist;
+handler.sendYCloudMessage = sendYCloudMessage;
 handler.syncGHLContact = syncGHLContact;
 handler.computeGhlRelevanceShadow = computeGhlRelevanceShadow;
 handler.buildGhlRelevanceConfigFromHandlerConfig = buildGhlRelevanceConfigFromHandlerConfig;
